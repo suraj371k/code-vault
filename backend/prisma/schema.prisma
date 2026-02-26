@@ -6,9 +6,28 @@
 
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id         Int       @id @default(autoincrement())
+  email      String    @unique
+  password   String
+  name       String
+  created_at DateTime
+  snippets   Snippet[]
+}
+
+model Snippet {
+  id         Int      @id @default(autoincrement())
+  author     User     @relation(fields: [authorId], references: [id])
+  authorId   Int
+  title      String
+  code       String
+  summary    String
+  created_at DateTime
 }
