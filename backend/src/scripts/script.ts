@@ -1,40 +1,42 @@
-import { prisma } from "../lib/prisma"
+import { prisma } from "../lib/prisma.js";
 
 async function main() {
-  // Create a new user with a post
   const user = await prisma.user.create({
     data: {
-      name: 'Alice',
-      email: 'alice@prisma.io',
-      posts: {
-        create: {
-          title: 'Hello World',
-          content: 'This is my first post!',
-          published: true,
-        },
-      },
+      email: "test@example.com",
+      password: "123456",
+      name: "Suraj",
+      created_at: new Date(),
     },
-    include: {
-      posts: true,
-    },
-  })
-  console.log('Created user:', user)
+  });
 
-  // Fetch all users with their posts
-  const allUsers = await prisma.user.findMany({
-    include: {
-      posts: true,
+  console.log("User created:", user);
+
+  // Create snippet
+  const snippet = await prisma.snippet.create({
+    data: {
+      title: "Hello World",
+      code: "console.log('Hello World')",
+      summary: "Basic JS example",
+      created_at: new Date(),
+      authorId: user.id,
     },
-  })
-  console.log('All users:', JSON.stringify(allUsers, null, 2))
+  });
+
+  console.log("Snippet created:", snippet);
+
+  // Fetch user with snippets
+  const result = await prisma.user.findMany({
+    include: {
+      snippets: true,
+    },
+  });
+
+  console.log("All users:", result);
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect()
-  })
-  .catch(async (e) => {
-    console.error(e)
-    await prisma.$disconnect()
-    process.exit(1)
-  })
+  .catch(e => console.error(e))
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
