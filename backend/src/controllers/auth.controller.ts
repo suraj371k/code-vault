@@ -83,7 +83,7 @@ export const login = async (req: Request, res: Response) => {
     //set cookies
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false,
+      secure: true,
       sameSite: "none",
       maxAge: 5 * 24 * 60 * 60 * 1000,
     });
@@ -93,11 +93,71 @@ export const login = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       message: "Login successful",
-      user: userWithoutPassword,
+      data: userWithoutPassword,
     });
-    
   } catch (error) {
     console.error(`error in login controller: ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const logout = async (req: Request, res: Response) => {
+  try {
+    res.clearCookie("token", {
+      secure: true,
+      httpOnly: true,
+      sameSite: "none",
+      maxAge: 0,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    console.error(`error in logout controller: ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const profile = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+
+    console.log("userId: " , userId)
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "not authorize" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        created_at: true,
+      },
+    });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.log(`error in profile controller ${error}`);
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });
