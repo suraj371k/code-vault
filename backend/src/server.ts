@@ -16,7 +16,7 @@ app.use(cookieParser())
 
 //health route
 app.get("/", (req, res) => {
-  res.send("server is running successfully");
+  res.send("successfully running");
 });
 
 //routes
