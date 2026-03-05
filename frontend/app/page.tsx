@@ -2,25 +2,18 @@
 
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { useProfile } from "@/hooks/auth/useProfile";
 
 export default function Home() {
-  const [data, setData] = useState();
 
+  const { data } = useProfile()
 
-  useEffect(() => {
-    async function fetchdata() {
-      const res = await axios.get("http://localhost:5000");
-      console.log(res.data);
-      setData(res.data);
-    }
-    fetchdata();
-  }, []);
+  console.log(data?.name)
 
-  console.log("data: ", data);
 
   return (
     <div>
-      <h1 className="text-4xl font-bold">{data}</h1>
+      <h1 className="text-4xl text-white font-bold">{data?.name}</h1>
     </div>
   );
 }

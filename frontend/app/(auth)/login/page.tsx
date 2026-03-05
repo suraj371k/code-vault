@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { LoginInput, useLogin } from "@/hooks/useLogin";
+import { LoginInput, useLogin } from "@/hooks/auth/useLogin";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 24 },
