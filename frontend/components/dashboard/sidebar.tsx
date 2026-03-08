@@ -18,8 +18,6 @@ import {
   SquareDashedBottomCode,
   LayoutDashboard,
   Database,
-  User2,
-  ChevronUp,
   LogOut,
   ChevronsUpDown,
   Building2,
@@ -29,7 +27,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useLogout } from "@/hooks/auth/useLogout";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useProfile } from "@/hooks/auth/useProfile";
 
 const items = [
@@ -45,9 +43,11 @@ const items = [
   { id: 4, path: "/dashboard/teams", title: "Teams", icon: Mail },
   { id: 5, path: "/dashboard/collections", title: "Collections", icon: Folder },
 ];
+
 const DashboardSidebar = () => {
   const [activeId, setActiveId] = useState(0);
   const { data, isPending, error } = useProfile();
+  const { slug } = useParams();
 
   const { mutate } = useLogout();
 
@@ -180,7 +180,7 @@ const DashboardSidebar = () => {
                       }
                     >
                       <Link
-                        href={item.path}
+                        href={`/organization/${slug}/${item.path}`}
                         className="flex items-center gap-3 w-full"
                       >
                         {/* Animated active left pill */}

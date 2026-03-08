@@ -19,7 +19,7 @@ export const signup = async (req: Request, res: Response) => {
 
     if (user) {
       return res
-        .status(400)
+        .status(409)
         .json({ success: false, message: "user already exist" });
     }
 
@@ -31,6 +31,21 @@ export const signup = async (req: Request, res: Response) => {
         email,
         password: hashedPassword,
       },
+    });
+
+    const token = jwt.sign(
+      { userId: newUser.id, email: newUser.email },
+      process.env.JWT_SECRET!,
+      {
+        expiresIn: "5d",
+      },
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 5 * 24 * 60 * 60 * 1000,
     });
 
     return res
@@ -128,21 +143,29 @@ export const profile = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.userId;
 
-    console.log("userId: " , userId)
-
     if (!userId) {
       return res.status(401).json({ success: false, message: "not authorize" });
     }
 
     const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
+      where: { id: userId },
       select: {
         id: true,
         name: true,
         email: true,
-        created_at: true,
+        createdAt: true,
+        memberships: {
+          select: {
+            role: true,
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
       },
     });
 

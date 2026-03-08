@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useOrganizations } from "@/hooks/organization/useOrganizations";
+import { useEffect, useMemo } from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,17 +17,35 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+function RootRedirect() {
+  const { data: org, isPending, error } = useOrganizations();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isPending || error) return;
+
+    if (!org || (Array.isArray(org) && org.length === 0)) {
+      router.push("/organization/create");
+    } else if (Array.isArray(org)) {
+      router.push(`/organization/${org[0].slug}/dashboard`);
+    }
+  }, [org, isPending, error, router]);
+
+  return null;
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const queryClient = new QueryClient();
+  const queryClient = useMemo(() => new QueryClient(), []);
+
   return (
     <html lang="en">
       <QueryClientProvider client={queryClient}>
         <body
-          className={`${geistSans.variable} ${geistMono.variable} bg-black antialiased absolute inset-0 `}
+          className={`${geistSans.variable} ${geistMono.variable} bg-black antialiased absolute inset-0 text-white`}
           style={{
             backgroundImage: `
             linear-gradient(rgba(20, 184, 166, 0.07) 1px, transparent 1px),
@@ -51,6 +72,7 @@ export default function RootLayout({
             }}
           />
           <Toaster />
+          <RootRedirect />
           {children}
         </body>
       </QueryClientProvider>

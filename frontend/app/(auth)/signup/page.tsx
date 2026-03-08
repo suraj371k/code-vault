@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { SignupInput, useSignup } from "@/hooks/auth/useSignup";
+import { useRouter } from "next/navigation";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 24 },
@@ -47,21 +48,41 @@ const Signup = () => {
     });
   };
 
+  const router = useRouter();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    mutate(data);
+    mutate(data, {
+      onSuccess: () => {
+        router.push("/organization/create");
+      },
+    });
   };
+
+  if (loading) {
+    return <p>Loading...</p>;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#0a0a0f]">
-      {/* Ambient blobs */}
+      {/* Radial glow — center */}
       <div
-        className="pointer-events-none absolute inset-0"
+        className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(ellipse 60% 50% at 20% 30%, rgba(99,102,241,0.18) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 80% 70%, rgba(14,165,233,0.15) 0%, transparent 70%)",
+            "radial-gradient(ellipse 80% 50% at 50% 0%, rgba(20, 184, 166, 0.18) 0%, transparent 70%)",
         }}
       />
+
+      {/* Secondary glow — bottom left */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 50% 40% at 10% 90%, rgba(6, 182, 212, 0.1) 0%, transparent 70%)",
+        }}
+      />
+
       {/* Grid overlay */}
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.04]"
@@ -170,7 +191,7 @@ const Signup = () => {
                       className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200 ${focused === "password" ? "text-indigo-400" : "text-white/20"}`}
                     />
                     <Input
-                      className="h-12 pl-10 pr-11 bg-white/[0.04] border border-white/[0.08] text-white placeholder:text-white/20 text-sm rounded-xl focus-visible:ring-1 focus-visible:ring-indigo-500/50 focus-visible:border-indigo-500/40 transition-all duration-200"
+                      className="h-12 pl-10 pr-11 bg-white/4 border border-white/8 text-white placeholder:text-white/20 text-sm rounded-xl focus-visible:ring-1 focus-visible:ring-indigo-500/50 focus-visible:border-indigo-500/40 transition-all duration-200"
                       name="password"
                       value={data.password}
                       onChange={handleChange}
@@ -198,7 +219,7 @@ const Signup = () => {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white border-0 transition-all duration-200 relative overflow-hidden group"
+                    className="w-full h-11 bg-teal-500 hover:bg-teal-400 text-black font-semibold tracking-wide transition-all duration-200 disabled:bg-white/5 disabled:text-white/20 disabled:border disabled:border-white/10 group"
                   >
                     <AnimatePresence mode="wait">
                       {loading ? (

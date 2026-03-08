@@ -4,6 +4,8 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 //routes imports
 import authRoutes from "./routes/auth.route.js";
+import snippetRoutes from "./routes/snippets.routes.js";
+import organizationRoutes from './routes/organization.routes.js'
 
 dotenv.config();
 
@@ -21,6 +23,10 @@ app.get("/", (req, res) => {
 
 //routes
 app.use("/api/auth", authRoutes);
+app.use("/api/snippets", snippetRoutes);
+console.log("Mounting organization routes...");
+
+app.use('/api/organization' , organizationRoutes);
 
 const port = process.env.PORT!;
 
