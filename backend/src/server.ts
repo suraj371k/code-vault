@@ -24,8 +24,6 @@ app.get("/", (req, res) => {
 //routes
 app.use("/api/auth", authRoutes);
 app.use("/api/snippets", snippetRoutes);
-console.log("Mounting organization routes...");
-
 app.use('/api/organization' , organizationRoutes);
 
 const port = process.env.PORT!;

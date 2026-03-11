@@ -21,14 +21,26 @@ import {
   LogOut,
   ChevronsUpDown,
   Building2,
+  Plus,
+  UserPlus,
 } from "lucide-react";
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLogout } from "@/hooks/auth/useLogout";
 import { useParams, useRouter } from "next/navigation";
 import { useProfile } from "@/hooks/auth/useProfile";
+import { useOrganizations } from "@/hooks/organization/useOrganizations";
+import {
+  DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+} from "../ui/dropdown-menu";
+import { useOrgStore } from "@/store/org-store";
 
 const items = [
   { id: 0, path: "/dashboard", title: "Dashboard", icon: LayoutDashboard },
@@ -46,12 +58,21 @@ const items = [
 
 const DashboardSidebar = () => {
   const [activeId, setActiveId] = useState(0);
-  const { data, isPending, error } = useProfile();
+  const { data, isPending, error } = useOrganizations();
+
+  const { activeOrg, setActiveOrg } = useOrgStore();
+
   const { slug } = useParams();
 
-  const { mutate } = useLogout();
+  const { mutate, isPending: loading } = useLogout();
 
   const router = useRouter();
+
+  useEffect(() => {
+    if (data?.[0] && !activeOrg) {
+      setActiveOrg(data[0]);
+    }
+  }, [data]);
 
   const handleLogout = () => {
     mutate(undefined, {
@@ -64,20 +85,12 @@ const DashboardSidebar = () => {
   return (
     <div
       className="h-screen"
-      style={{ "--sidebar": "#0a0a0f" } as React.CSSProperties}
+      style={{ "--sidebar": "black" } as React.CSSProperties}
     >
       <Sidebar
         collapsible="icon"
         className="border-r border-teal-950/60 bg-[#0a0a0f] text-zinc-100 relative overflow-hidden"
       >
-        {/* ── Ambient teal glow orbs ── */}
-        <div
-          className="pointer-events-none absolute -top-16 left-1/2 -translate-x-1/2 w-56 h-56 rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(20,184,166,0.18) 0%, transparent 70%)",
-          }}
-        />
         <div
           className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full"
           style={{
@@ -86,57 +99,153 @@ const DashboardSidebar = () => {
           }}
         />
 
-        {/* ── Glowing right border ── */}
-        <div
-          className="pointer-events-none absolute right-0 top-0 bottom-0 w-px z-50"
-          style={{
-            background:
-              "linear-gradient(180deg, transparent 0%, rgba(20,184,166,0.45) 30%, rgba(45,212,191,0.55) 50%, rgba(20,184,166,0.45) 70%, transparent 100%)",
-          }}
-        />
-
-        {/* ──────────── HEADER ──────────── */}
+        {/*  HEADER  */}
         <SidebarHeader className="px-4 py-5 border-b border-teal-950/50 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, ease: "easeOut" }}
+          {/*Organization Card */}
+          <div
+            className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-teal-950/30 group-data-[collapsible=icon]:justify-center"
+            style={{ background: "rgba(20,184,166,0.04)" }}
           >
-            <Link href="/" className="flex items-center gap-3 group">
-              {/* Logo with teal glow pulse */}
-              <motion.div
-                className="flex items-center justify-center size-8 rounded-lg shrink-0"
+            {/* Org Avatar */}
+            <div
+              className="flex items-center justify-center size-7 rounded-lg shrink-0"
+              style={{
+                background: "linear-gradient(135deg, #0f766e, #0d9488)",
+                boxShadow: "0 0 12px 2px rgba(20,184,166,0.38)",
+              }}
+            >
+              <Building2 className="size-3.5 text-teal-100" strokeWidth={1.8} />
+            </div>
+
+            <div className="group-data-[collapsible=icon]:hidden flex-1 min-w-0">
+              <p className="text-[10px] font-semibold tracking-[0.12em] uppercase text-teal-700 leading-none">
+                Organization
+              </p>
+              <div className="text-[13px] font-semibold text-slate-200 mt-0.75 truncate leading-none">
+                {activeOrg?.name}
+              </div>
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <ChevronsUpDown className="size-3.5 shrink-0 text-teal-800 group-data-[collapsible=icon]:hidden cursor-pointer" />
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent
+                className="w-64 p-0 overflow-hidden border border-white/8"
+                align="start"
                 style={{
-                  background:
-                    "linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)",
-                  boxShadow: "0 0 16px 4px rgba(20,184,166,0.45)",
-                }}
-                animate={{
-                  boxShadow: [
-                    "0 0 12px 3px rgba(20,184,166,0.4)",
-                    "0 0 22px 6px rgba(20,184,166,0.65)",
-                    "0 0 12px 3px rgba(20,184,166,0.4)",
-                  ],
-                }}
-                transition={{
-                  duration: 3,
-                  repeat: Infinity,
-                  ease: "easeInOut",
+                  background: "#191919",
+                  borderRadius: "10px",
+                  boxShadow:
+                    "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)",
                 }}
               >
-                <Database className="size-4 text-white" strokeWidth={2.2} />
-              </motion.div>
+                {/* Header label */}
+                <div className="px-3 pt-3 pb-1">
+                  <p className="text-[10px] font-semibold tracking-[0.12em] uppercase text-neutral-500">
+                    Workspaces
+                  </p>
+                </div>
 
-              <div className="group-data-[collapsible=icon]:hidden min-w-0">
-                <p className="font-bold tracking-tight text-white text-[15px] leading-none">
-                  Code<span className="text-teal-400">Vault</span>
-                </p>
-                <p className="text-[10px] tracking-[0.16em] uppercase font-semibold text-teal-700/80 mt-[3px]">
-                  Workspace
-                </p>
-              </div>
-            </Link>
-          </motion.div>
+                {/* Org list */}
+                <div className="px-1 pb-1">
+                  {data?.map((org) => (
+                    <DropdownMenuItem
+                      onClick={() => setActiveOrg(org)}
+                      key={org.id}
+                      className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
+                      style={{ color: "#e5e5e5" }}
+                    >
+                      <div
+                        className="flex items-center justify-center size-6 rounded-md shrink-0"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #0f766e, #0d9488)",
+                        }}
+                      >
+                        <Building2
+                          className="size-3 text-teal-100"
+                          strokeWidth={1.8}
+                        />
+                      </div>
+                      <span className="flex-1 text-[13px] font-medium truncate ">
+                        {org.name}
+                      </span>
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0  hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
+                        style={{
+                          background: "rgba(20,184,166,0.15)",
+                          color: "#2dd4bf",
+                        }}
+                      >
+                        {org.role}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </div>
+
+                <div className="mx-3 border-t border-white/6" />
+
+                {/* Invite member */}
+                <div className="px-1 py-1">
+                  <DropdownMenuItem
+                    className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer  hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
+                    style={{ color: "#a3a3a3" }}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    <div
+                      className="flex items-center justify-center size-6 rounded-md shrink-0"
+                      style={{ background: "rgba(255,255,255,0.06)" }}
+                    >
+                      <UserPlus
+                        className="size-3.5"
+                        style={{ color: "#a3a3a3" }}
+                        strokeWidth={1.8}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-neutral-300">
+                        Invite members
+                      </p>
+                      <p className="text-[11px] text-neutral-500 truncate">
+                        Add teammates via email
+                      </p>
+                    </div>
+                  </DropdownMenuItem>
+                </div>
+
+                <div className="mx-3 border-t border-white/6" />
+
+                {/* Create org */}
+                <div className="px-1 py-1 pb-1.5">
+                  <DropdownMenuItem
+                    className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer  hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
+                    style={{ color: "#a3a3a3" }}
+                  >
+                    <div
+                      className="flex items-center justify-center size-6 rounded-md shrink-0"
+                      style={{ background: "rgba(255,255,255,0.06)" }}
+                    >
+                      <Plus
+                        className="size-3.5"
+                        style={{ color: "#a3a3a3" }}
+                        strokeWidth={2}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-neutral-300">
+                        Create organization
+                      </p>
+                      <p className="text-[11px] text-neutral-500 truncate">
+                        Set up a new workspace
+                      </p>
+                    </div>
+                  </DropdownMenuItem>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </SidebarHeader>
 
         {/*NAV ITEMS */}
@@ -242,7 +351,7 @@ const DashboardSidebar = () => {
           </SidebarMenu>
         </SidebarContent>
 
-        {/* ──────────── FOOTER ──────────── */}
+        {/* footer */}
         <SidebarFooter className="border-t border-teal-950/50 px-2 py-3 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -250,36 +359,6 @@ const DashboardSidebar = () => {
             transition={{ duration: 0.4, delay: 0.38, ease: "easeOut" }}
             className="space-y-1"
           >
-            {/* ── Organization Card ── */}
-            <div
-              className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-teal-950/30 group-data-[collapsible=icon]:justify-center"
-              style={{ background: "rgba(20,184,166,0.04)" }}
-            >
-              {/* Org Avatar */}
-              <div
-                className="flex items-center justify-center size-7 rounded-lg shrink-0"
-                style={{
-                  background: "linear-gradient(135deg, #0f766e, #0d9488)",
-                  boxShadow: "0 0 12px 2px rgba(20,184,166,0.38)",
-                }}
-              >
-                <Building2
-                  className="size-3.5 text-teal-100"
-                  strokeWidth={1.8}
-                />
-              </div>
-
-              <div className="group-data-[collapsible=icon]:hidden flex-1 min-w-0">
-                <p className="text-[10px] font-semibold tracking-[0.12em] uppercase text-teal-700 leading-none">
-                  Organization
-                </p>
-                <p className="text-[13px] font-semibold text-slate-200 mt-[3px] truncate leading-none">
-                  Acme Corp
-                </p>
-              </div>
-
-              <ChevronsUpDown className="size-3.5 shrink-0 text-teal-800 group-data-[collapsible=icon]:hidden" />
-            </div>
             {/* ── Logout Button ── */}
             <motion.button
               whileHover={{ scale: 1.01 }}
@@ -300,7 +379,7 @@ const DashboardSidebar = () => {
               </div>
 
               <span className="group-data-[collapsible=icon]:hidden text-[13px] font-medium text-zinc-500 group-hover/logout:text-red-400 transition-colors duration-200">
-                Log out
+                {loading ? "Loging out..." : "Logout"}
               </span>
             </motion.button>
           </motion.div>

@@ -1,10 +1,10 @@
 import { User } from "./auth";
 
 export interface Organizations {
-  id: number;
-  name: string;
-  slug: string;
-  role: Role
+ id: number;
+ name: string;
+ slug: string;
+ role: Role
 }
 
 export interface OrganizationInput {
