@@ -1,11 +1,11 @@
 "use client";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useOrganizations } from "@/hooks/organization/useOrganizations";
 import { useEffect, useMemo } from "react";
+import { Toaster } from 'react-hot-toast'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 function RootRedirect() {
+
   const { data: org, isPending, error } = useOrganizations();
   const router = useRouter();
 

@@ -1,10 +1,10 @@
 import { User } from "./auth";
 
 export interface Organizations {
- id: number;
- name: string;
- slug: string;
- role: Role
+  id: number;
+  name: string;
+  slug: string;
+  role: Role;
 }
 
 export interface OrganizationInput {
@@ -18,7 +18,7 @@ interface Members {
   userId: number;
   organizationId: number;
   role: Role;
-  user: User
+  user: User;
 }
 
 export interface Organization {
@@ -26,4 +26,19 @@ export interface Organization {
   name: string;
   slug: string;
   members: Members[];
+}
+
+export interface MembershipInput {
+  email: string;
+}
+
+export interface MembershipResponse {
+  success: boolean;
+  message: string;
+  data: {
+    id: number;
+    userId: number;
+    organizationId: number;
+    role: string;
+  };
 }

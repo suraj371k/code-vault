@@ -53,7 +53,7 @@ const Login = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     mutate(data, {
-      onSuccess: () => {
+      onSuccess: (res) => {
         router.push(`/organization/${slug}/dashboard`);
       },
     });

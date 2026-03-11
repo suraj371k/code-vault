@@ -40,7 +40,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuItem,
 } from "../ui/dropdown-menu";
-import { useOrgStore } from "@/store/org-store";
+import InviteMembersDialog from "../invite-member";
+import CreateOrganizationDialog from "../create-organization";
 
 const items = [
   { id: 0, path: "/dashboard", title: "Dashboard", icon: LayoutDashboard },
@@ -58,21 +59,14 @@ const items = [
 
 const DashboardSidebar = () => {
   const [activeId, setActiveId] = useState(0);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [orgOpen, setOrgOpen] = useState(false);
   const { data, isPending, error } = useOrganizations();
-
-  const { activeOrg, setActiveOrg } = useOrgStore();
-
   const { slug } = useParams();
 
   const { mutate, isPending: loading } = useLogout();
 
   const router = useRouter();
-
-  useEffect(() => {
-    if (data?.[0] && !activeOrg) {
-      setActiveOrg(data[0]);
-    }
-  }, [data]);
 
   const handleLogout = () => {
     mutate(undefined, {
@@ -81,6 +75,8 @@ const DashboardSidebar = () => {
       },
     });
   };
+
+  const activeOrganization = data?.find((org) => org.slug === slug);
 
   return (
     <div
@@ -122,7 +118,7 @@ const DashboardSidebar = () => {
                 Organization
               </p>
               <div className="text-[13px] font-semibold text-slate-200 mt-0.75 truncate leading-none">
-                {activeOrg?.name}
+                <p>{activeOrganization?.name ?? "..."}</p>
               </div>
             </div>
 
@@ -152,8 +148,10 @@ const DashboardSidebar = () => {
                 <div className="px-1 pb-1">
                   {data?.map((org) => (
                     <DropdownMenuItem
-                      onClick={() => setActiveOrg(org)}
                       key={org.id}
+                      onClick={() =>
+                        router.push(`/organization/${org.slug}/dashboard`)
+                      }
                       className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
                       style={{ color: "#e5e5e5" }}
                     >
@@ -190,9 +188,10 @@ const DashboardSidebar = () => {
                 {/* Invite member */}
                 <div className="px-1 py-1">
                   <DropdownMenuItem
-                    className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer  hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
+                    className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
                     style={{ color: "#a3a3a3" }}
                     onSelect={(e) => e.preventDefault()}
+                    onClick={() => setInviteOpen(true)}
                   >
                     <div
                       className="flex items-center justify-center size-6 rounded-md shrink-0"
@@ -213,6 +212,13 @@ const DashboardSidebar = () => {
                       </p>
                     </div>
                   </DropdownMenuItem>
+                  {activeOrganization && (
+                    <InviteMembersDialog
+                      open={inviteOpen}
+                      onOpenChange={setInviteOpen}
+                      organizationId={activeOrganization.id}
+                    />
+                  )}
                 </div>
 
                 <div className="mx-3 border-t border-white/6" />
@@ -220,6 +226,8 @@ const DashboardSidebar = () => {
                 {/* Create org */}
                 <div className="px-1 py-1 pb-1.5">
                   <DropdownMenuItem
+                    onSelect={(e) => e.preventDefault()}
+                    onClick={() => setOrgOpen(true)}
                     className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer  hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
                     style={{ color: "#a3a3a3" }}
                   >
@@ -245,6 +253,10 @@ const DashboardSidebar = () => {
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
+            <CreateOrganizationDialog
+              open={orgOpen}
+              onOpenChange={setOrgOpen}
+            />
           </div>
         </SidebarHeader>
 
