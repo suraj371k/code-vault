@@ -25,7 +25,7 @@ export interface Organization {
   id: number;
   name: string;
   slug: string;
-  members: Members[];
+  members?: Members[];
 }
 
 export interface MembershipInput {

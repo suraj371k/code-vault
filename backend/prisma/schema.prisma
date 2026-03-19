@@ -27,8 +27,9 @@ model Organization {
   id        Int          @id @default(autoincrement())
   name      String
   createdAt DateTime     @default(now())
-  slug      String?       @unique
+  slug      String?      @unique
   members   Membership[]
+  snippets  Snippet[]
 }
 
 model Membership {
@@ -46,9 +47,14 @@ model Membership {
 }
 
 model Snippet {
-  id         Int      @id @default(autoincrement())
-  author     User     @relation(fields: [authorId], references: [id])
-  authorId   Int
+  id Int @id @default(autoincrement())
+
+  author   User @relation(fields: [authorId], references: [id])
+  authorId Int
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId Int
+
   title      String
   code       String
   language   String?

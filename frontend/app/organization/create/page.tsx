@@ -38,7 +38,7 @@ const Organization = () => {
 
   const createOrganization = () => {
     mutate(data, {
-      onSuccess: (res) => {
+      onSuccess: () => {
         router.push(`/organization/${slug}/dashboard`);
       },
       onError: (error: any) => {

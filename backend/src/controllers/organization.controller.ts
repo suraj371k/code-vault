@@ -211,7 +211,6 @@ export const getOrganizationBySlug = async (req: Request, res: Response) => {
 export const getMyOrganizations = async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;
   try {
-    
     const memberships = await prisma.membership.findMany({
       where: { userId },
       include: {
@@ -224,19 +223,17 @@ export const getMyOrganizations = async (req: Request, res: Response) => {
         },
       },
     });
-    
+
     const organizations = memberships.map((m) => ({
       ...m.organization,
       role: m.role,
     }));
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "organizations fetched successfully",
-        data: organizations,
-      });
+    return res.status(200).json({
+      success: true,
+      message: "organizations fetched successfully",
+      data: organizations,
+    });
   } catch (error) {
     console.error(`error in get all organization controller: ${error}`);
     return res
