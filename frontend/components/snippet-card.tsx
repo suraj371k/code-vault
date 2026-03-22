@@ -1,3 +1,4 @@
+import { Snippet } from "@/types/snippets";
 import { useDeleteSnippets } from "@/hooks/snippets/useDeleteSnippets";
 import Link from "next/link";
 import { Badge } from "./ui/badge";
@@ -8,7 +9,7 @@ export const SnippetCard = ({
   snippet,
   organizationSlug,
 }: {
-  snippet: any;
+  snippet: Snippet;
   organizationSlug: string;
 }) => {
   const { mutate: deleteSnippet, isPending } = useDeleteSnippets(snippet.id);
@@ -30,10 +31,14 @@ export const SnippetCard = ({
     });
   };
 
+  // Pretty-print enum value → "TypeScript"
+  const formatLang = (lang: string) =>
+    lang.charAt(0).toUpperCase() + lang.slice(1).toLowerCase();
+
   return (
     <Link
       href={`/organization/${organizationSlug}/dashboard/snippets/${snippet.id}`}
-      className="group relative  rounded-xl border border-zinc-800/70 bg-zinc-900/50 p-4 hover:border-teal-700/40 transition-all duration-300 cursor-pointer overflow-hidden"
+      className="group relative rounded-xl border border-zinc-800/70 bg-zinc-900/50 p-4 hover:border-teal-700/40 transition-all duration-300 cursor-pointer overflow-hidden"
       style={{
         backdropFilter: "blur(8px)",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
@@ -48,22 +53,31 @@ export const SnippetCard = ({
       />
 
       <div className="flex items-start justify-between mb-3 relative">
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-teal-950/60 text-teal-400 border border-teal-800/40">
-          {snippet.language}
-        </span>
+        {snippet.language ? (
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-teal-950/60 text-teal-400 border border-teal-800/40">
+            {formatLang(snippet.language)}
+          </span>
+        ) : (
+          <span className="text-xs px-2 py-0.5 rounded-md bg-zinc-800/60 text-zinc-500 border border-zinc-700/40">
+            No language
+          </span>
+        )}
       </div>
 
       <p className="text-white text-sm font-semibold mb-1 relative group-hover:text-teal-100 transition-colors">
         {snippet.title}
       </p>
-      <div className="flex items-center gap-2 mb-2">
-        <Badge
-          variant="outline"
-          className="text-[10px] my-2 px-2 py-0 border-zinc-700/60 text-zinc-300 bg-black/40 rounded-md"
-        >
-          {snippet.category}
-        </Badge>
-      </div>
+
+      {snippet.category && (
+        <div className="flex items-center gap-2 mb-2">
+          <Badge
+            variant="outline"
+            className="text-[10px] my-2 px-2 py-0 border-zinc-700/60 text-zinc-300 bg-black/40 rounded-md"
+          >
+            {snippet.category}
+          </Badge>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <div className="w-6 h-6 rounded-full bg-teal-950 border border-teal-800/50 flex items-center justify-center text-[10px] font-bold text-teal-400 uppercase">
@@ -87,7 +101,7 @@ export const SnippetCard = ({
         <button
           onClick={(e) => {
             e.preventDefault();
-            handleCopy()
+            handleCopy();
           }}
           className="text-xs text-zinc-500 hover:text-teal-400 transition-colors"
         >
@@ -100,7 +114,7 @@ export const SnippetCard = ({
           }}
           className="text-xs text-zinc-500 hover:text-red-400 transition-colors ml-auto"
         >
-          {isPending ? "Deleting" : "Delete"}
+          {isPending ? "Deleting…" : "Delete"}
         </button>
       </div>
     </Link>

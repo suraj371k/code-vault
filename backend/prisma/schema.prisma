@@ -12,6 +12,64 @@ enum Role {
   MEMBER
 }
 
+enum Language {
+  // Web
+  JAVASCRIPT
+  TYPESCRIPT
+  HTML
+  CSS
+
+  // Backend
+  PYTHON
+  JAVA
+  CSHARP
+  GO
+  RUST
+  RUBY
+  PHP
+  KOTLIN
+  SWIFT
+  SCALA
+  ELIXIR
+  HASKELL
+  ERLANG
+  CLOJURE
+
+  // Systems
+  C
+  CPP
+  ZIG
+  ASM
+
+  // Data / ML
+  R
+  MATLAB
+  JULIA
+
+  // Shell / DevOps
+  BASH
+  POWERSHELL
+  DOCKERFILE
+  YAML
+  TOML
+
+  // Database
+  SQL
+  PLSQL
+  GRAPHQL
+
+  // Mobile
+  DART
+  OBJC
+
+  // Other
+  LUA
+  PERL
+  GROOVY
+  SOLIDITY
+  VIM
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
@@ -57,8 +115,9 @@ model Snippet {
 
   title      String
   code       String
-  language   String?
+  language   Language?
   category   String?
-  summary    String?
+  summary    String[]
+  tags       String[]
   created_at DateTime @default(now())
 }

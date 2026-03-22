@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   Sidebar,
@@ -32,6 +32,7 @@ import { useLogout } from "@/hooks/auth/useLogout";
 import { useParams, useRouter } from "next/navigation";
 import { useProfile } from "@/hooks/auth/useProfile";
 import { useOrganizations } from "@/hooks/organization/useOrganizations";
+import toast from "react-hot-toast";
 import {
   DropdownMenuTrigger,
   DropdownMenu,
@@ -71,7 +72,11 @@ const DashboardSidebar = () => {
   const handleLogout = () => {
     mutate(undefined, {
       onSuccess: () => {
+        toast.success("Logged out successfully");
         router.push("/login");
+      },
+      onError: (err: Error) => {
+        toast.error(err.message || "Logout failed. Please try again.");
       },
     });
   };
@@ -80,12 +85,12 @@ const DashboardSidebar = () => {
 
   return (
     <div
-      className="h-screen"
+      className="h-screen flex flex-col overflow-hidden"
       style={{ "--sidebar": "black" } as React.CSSProperties}
     >
       <Sidebar
         collapsible="icon"
-        className="border-r border-teal-950/60 bg-[#0a0a0f] text-zinc-100 relative overflow-hidden"
+        className="border-r border-teal-950/60 bg-[#0a0a0f] text-zinc-100 relative overflow-hidden !h-screen"
       >
         <div
           className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full"
@@ -371,7 +376,7 @@ const DashboardSidebar = () => {
             transition={{ duration: 0.4, delay: 0.38, ease: "easeOut" }}
             className="space-y-1"
           >
-            {/* ── Logout Button ── */}
+            {/* â”€â”€ Logout Button â”€â”€ */}
             <motion.button
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
@@ -402,3 +407,6 @@ const DashboardSidebar = () => {
 };
 
 export default DashboardSidebar;
+
+
+

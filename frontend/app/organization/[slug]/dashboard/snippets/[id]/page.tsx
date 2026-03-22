@@ -29,12 +29,16 @@ import { useDeleteSnippets } from "@/hooks/snippets/useDeleteSnippets";
 import toast from "react-hot-toast";
 import { useUpdateSnippet } from "@/hooks/snippets/useUpdateSnippet";
 import { Editor, BeforeMount } from "@monaco-editor/react";
+import ReactMarkdown from "react-markdown";
 
 const Shimmer = ({ className = "" }: { className?: string }) => (
   <div className={`rounded-md bg-zinc-800/70 animate-pulse ${className}`} />
 );
 
 const TABS = ["Code", "Summary"] as const;
+
+const formatLang = (lang: string | null) =>
+  lang ? lang.charAt(0).toUpperCase() + lang.slice(1).toLowerCase() : null;
 type Tab = (typeof TABS)[number];
 
 const Background = () => (
@@ -110,7 +114,7 @@ const CodeBlock = ({
     <div>
       <Editor
         theme="vs-dark"
-        language={language.toLowerCase()}
+        language={(language ?? "plaintext").toLowerCase()}
         height="50vh"
         value={code}
         onValidate={() => {}}
@@ -128,7 +132,7 @@ const CodeBlock = ({
             horizontalScrollbarSize: 4,
           },
           padding: { top: 16, bottom: 16 },
-          renderValidationDecorations: "off", 
+          renderValidationDecorations: "off",
           glyphMargin: false,
         }}
       />
@@ -137,18 +141,35 @@ const CodeBlock = ({
 );
 
 /*  summary panel */
-const SummaryPanel = ({ summary }: { summary?: string }) => (
-  <div
-    className="rounded-2xl border border-zinc-800/70 bg-zinc-900/50 p-6 min-h-40"
-    style={{ backdropFilter: "blur(8px)" }}
-  >
-    {summary ? (
-      <p className="text-zinc-300 text-sm leading-relaxed">{summary}</p>
-    ) : (
-      <p className="text-zinc-600 text-sm italic">
-        No summary provided for this snippet.
-      </p>
-    )}
+const SummaryPanel = ({ summary, tags }: { summary: string[]; tags: string[] }) => (
+  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-lg">
+    {/* SUMMARY */}
+    <div className="prose prose-invert max-w-none">
+      <h3 className="text-lg font-semibold text-zinc-100 mb-4">Summary</h3>
+
+      <ol className="list-decimal pl-6 space-y-3 marker:text-indigo-400">
+        {summary.map((s, i) => (
+          <li
+            key={i}
+            className="text-zinc-300 leading-relaxed bg-zinc-800/40 rounded-lg px-4 py-3 hover:bg-zinc-800 transition"
+          >
+            <ReactMarkdown>{s}</ReactMarkdown>
+          </li>
+        ))}
+      </ol>
+    </div>
+
+    {/* TAGS */}
+    <div className="mt-6 flex flex-wrap gap-2">
+      {tags.map((tag, i) => (
+        <span
+          key={i}
+          className="px-3 py-1 text-sm rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 hover:bg-indigo-500/20 transition"
+        >
+          #{tag}
+        </span>
+      ))}
+    </div>
   </div>
 );
 
@@ -158,7 +179,7 @@ type Msg = { role: "user" | "ai"; text: string };
 const ChatSheet = ({
   snippet,
 }: {
-  snippet: { title: string; code: string; language: string };
+  snippet: { title: string; code: string; language: string | null };
 }) => {
   const [messages, setMessages] = useState<Msg[]>([
     {
@@ -187,7 +208,7 @@ const ChatSheet = ({
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
-          system: `You are a concise code assistant. The user is viewing this ${snippet.language} snippet titled "${snippet.title}":\n\n${snippet.code}\n\nAnswer questions about this code briefly and clearly.`,
+          system: `You are a concise code assistant. The user is viewing this ${snippet.language ?? "unknown"} snippet titled "${snippet.title}":\n\n${snippet.code}\n\nAnswer questions about this code briefly and clearly.`,
           messages: [{ role: "user", content: text }],
         }),
       });
@@ -412,7 +433,7 @@ const SnippetDetails = () => {
         {/* meta */}
         <div className="flex flex-wrap items-center gap-3 mb-8">
           <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-teal-950/60 text-teal-400 border border-teal-800/40">
-            {data.language}
+            {formatLang(data.language)}
           </span>
           <Badge
             variant="outline"
@@ -460,11 +481,13 @@ const SnippetDetails = () => {
             code={editedCode}
             copy={() => copy(data.code)}
             copied={copied}
-            language={data.language}
+            language={formatLang(data.language)}
             onCodeChange={handleCodeChange}
           />
         )}
-        {activeTab === "Summary" && <SummaryPanel summary={data.summary} />}
+        {activeTab === "Summary" && (
+          <SummaryPanel tags={data.tags} summary={data.summary} />
+        )}
 
         {/* action row */}
         <div className="flex flex-wrap items-center gap-3 mt-6">
@@ -507,7 +530,7 @@ const SnippetDetails = () => {
         </div>
 
         <p className="text-center text-zinc-700 text-xs mt-14 tracking-widest uppercase">
-          {data.language} · {data.category} · {data.organization?.name ?? ""}
+          {formatLang(data.language)} · {data.category} · {data.organization?.name ?? ""}
         </p>
       </div>
     </div>
@@ -515,3 +538,5 @@ const SnippetDetails = () => {
 };
 
 export default SnippetDetails;
+
+

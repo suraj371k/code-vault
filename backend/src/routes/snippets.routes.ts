@@ -3,6 +3,7 @@ import { authMiddleware } from "../middleware/auth.middleware.js";
 import {
   createSnippets,
   deleteSnippet,
+  getAllLanguages,
   getOrganizationSnippet,
   getSnippetById,
   updateSnippets,
@@ -28,5 +29,8 @@ router.delete("/:snippetId", authMiddleware, deleteSnippet);
 
 //update snippet
 router.patch("/:snippetId", authMiddleware, updateSnippets);
+
+// get all languages route
+router.get('/all/languages' , getAllLanguages)
 
 export default router;
