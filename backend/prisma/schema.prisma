@@ -7,21 +7,117 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  OWNER
+  MEMBER
+}
+
+enum Language {
+  // Web
+  JAVASCRIPT
+  TYPESCRIPT
+  HTML
+  CSS
+
+  // Backend
+  PYTHON
+  JAVA
+  CSHARP
+  GO
+  RUST
+  RUBY
+  PHP
+  KOTLIN
+  SWIFT
+  SCALA
+  ELIXIR
+  HASKELL
+  ERLANG
+  CLOJURE
+
+  // Systems
+  C
+  CPP
+  ZIG
+  ASM
+
+  // Data / ML
+  R
+  MATLAB
+  JULIA
+
+  // Shell / DevOps
+  BASH
+  POWERSHELL
+  DOCKERFILE
+  YAML
+  TOML
+
+  // Database
+  SQL
+  PLSQL
+  GRAPHQL
+
+  // Mobile
+  DART
+  OBJC
+
+  // Other
+  LUA
+  PERL
+  GROOVY
+  SOLIDITY
+  VIM
+}
+
 model User {
-  id         Int       @id @default(autoincrement())
-  email      String    @unique
-  password   String
-  name       String
-  created_at DateTime?
-  snippets   Snippet[]
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+
+  memberships Membership[]
+  snippets    Snippet[]
+}
+
+model Organization {
+  id        Int          @id @default(autoincrement())
+  name      String
+  createdAt DateTime     @default(now())
+  slug      String?      @unique
+  members   Membership[]
+  snippets  Snippet[]
+}
+
+model Membership {
+  id Int @id @default(autoincrement())
+
+  user   User @relation(fields: [userId], references: [id])
+  userId Int
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId Int
+
+  role Role @default(MEMBER)
+
+  @@unique([userId, organizationId])
 }
 
 model Snippet {
-  id         Int      @id @default(autoincrement())
-  author     User     @relation(fields: [authorId], references: [id])
-  authorId   Int
+  id Int @id @default(autoincrement())
+
+  author   User @relation(fields: [authorId], references: [id])
+  authorId Int
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId Int
+
   title      String
   code       String
-  summary    String
-  created_at DateTime
+  language   Language?
+  category   String?
+  summary    String[]
+  tags       String[]
+  created_at DateTime @default(now())
 }
