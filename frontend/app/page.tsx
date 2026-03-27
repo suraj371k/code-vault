@@ -1,15 +1,15 @@
 'use client';
-import { Navbar }              from './home/Navbar';
-import { HeroSection }         from './home/HeroSection';
-import { StatsBar }            from './home/StatsBar';
-import { FeaturesSection }     from './home/FeaturesSection';
-import { HowItWorksSection }   from './home/HowItWorksSection';
-import { AIDemoSection }       from './home/AIDemoSection';
-import { PricingSection }      from './home/PricingSection';
-import { TestimonialsSection } from './home/TestimonialsSection';
-import { FAQSection }          from './home/FAQSection';
-import { CTABanner }           from './home/CTABanner';
-import { Footer }              from './home/Footer';
+import { Navbar }              from '../components/home/Navbar';
+import { HeroSection }         from '../components/home/HeroSection';
+import { StatsBar }            from '../components/home/StatsBar';
+import { FeaturesSection }     from '../components/home/FeaturesSection';
+import { HowItWorksSection }   from '../components/home/HowItWorksSection';
+import { AIDemoSection }       from '../components/home/AIDemoSection';
+import { PricingSection }      from '../components/home/PricingSection';
+import { TestimonialsSection } from '../components/home/TestimonialsSection';
+import { FAQSection }          from '../components/home/FAQSection';
+import { CTABanner }           from '../components/home/CTABanner';
+import { Footer }              from '../components/home/Footer';
 
 function Divider() {
   return <div className="section-divider" />;
@@ -19,7 +19,6 @@ export default function Home() {
   return (
     <div className="min-h-screen text-white overflow-x-hidden" style={{ background: '#000' }}>
 
-      {/* ── Fixed background layers (match snippet page) ── */}
       <div className="fixed inset-0 pointer-events-none grid-bg" />
       <div className="fixed inset-0 pointer-events-none glow-orb-1"
            style={{ background: 'radial-gradient(ellipse 80% 50% at 50% 0%,rgba(20,184,166,.18) 0%,transparent 70%)' }} />

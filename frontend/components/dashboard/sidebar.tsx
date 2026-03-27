@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   Sidebar,
@@ -30,15 +30,12 @@ import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useLogout } from "@/hooks/auth/useLogout";
 import { useParams, useRouter } from "next/navigation";
-import { useProfile } from "@/hooks/auth/useProfile";
 import { useOrganizations } from "@/hooks/organization/useOrganizations";
 import toast from "react-hot-toast";
 import {
   DropdownMenuTrigger,
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
   DropdownMenuItem,
 } from "../ui/dropdown-menu";
 import InviteMembersDialog from "../invite-member";
@@ -62,7 +59,7 @@ const DashboardSidebar = () => {
   const [activeId, setActiveId] = useState(0);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [orgOpen, setOrgOpen] = useState(false);
-  const { data, isPending, error } = useOrganizations();
+  const { data, isPending } = useOrganizations();
   const { slug } = useParams();
 
   const { mutate, isPending: loading } = useLogout();
@@ -73,7 +70,7 @@ const DashboardSidebar = () => {
     mutate(undefined, {
       onSuccess: () => {
         toast.success("Logged out successfully");
-        router.push("/login");
+        router.push("/");
       },
       onError: (err: Error) => {
         toast.error(err.message || "Logout failed. Please try again.");
@@ -81,7 +78,20 @@ const DashboardSidebar = () => {
     });
   };
 
-  const activeOrganization = data?.find((org) => org.slug === slug);
+  const currentSlug = Array.isArray(slug) ? slug[0] : slug;
+  const activeOrganization = data?.find((org) => org.slug === currentSlug);
+
+  useEffect(() => {
+    if (isPending || !data?.length) return;
+
+    const hasValidSlug = currentSlug
+      ? data.some((org) => org.slug === currentSlug)
+      : false;
+
+    if (!hasValidSlug) {
+      router.replace(`/organization/${data[0].slug}/dashboard`);
+    }
+  }, [data, isPending, slug, router]);
 
   return (
     <div
@@ -90,7 +100,7 @@ const DashboardSidebar = () => {
     >
       <Sidebar
         collapsible="icon"
-        className="border-r border-teal-950/60 bg-[#0a0a0f] text-zinc-100 relative overflow-hidden !h-screen"
+        className="border-r border-teal-950/60 bg-[#0a0a0f] text-zinc-100 relative overflow-hidden h-screen!"
       >
         <div
           className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full"
