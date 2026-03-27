@@ -12,7 +12,6 @@ console.log("[debug] loaded organization.routes");
 
 const router = Router();
 
-
 router.post("/", authMiddleware, createOrganization);
 
 router.get('/me' , authMiddleware , getMyOrganizations)

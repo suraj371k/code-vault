@@ -148,13 +148,23 @@ export const getMembers = async (req: Request, res: Response) => {
         organizationId,
       },
       include: {
-        user: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            createdAt: true,
+          }
+        }
       },
     });
+
+    const totalMembers = await prisma.membership.count({where: {organizationId}});
 
     return res.status(200).json({
       success: true,
       message: "members fetched successfully",
+      total: totalMembers,
       data: members,
     });
   } catch (error) {

@@ -79,6 +79,11 @@ model User {
 
   memberships Membership[]
   snippets    Snippet[]
+
+  groupMembers GroupMember[]
+
+  messages            Message[]
+  conversationMembers ConversationMember[]
 }
 
 model Organization {
@@ -88,6 +93,7 @@ model Organization {
   slug      String?      @unique
   members   Membership[]
   snippets  Snippet[]
+  groups    Group[]
 }
 
 model Membership {
@@ -119,5 +125,61 @@ model Snippet {
   category   String?
   summary    String[]
   tags       String[]
-  created_at DateTime @default(now())
+  created_at DateTime  @default(now())
+}
+
+model Message {
+  id       Int    @id @default(autoincrement())
+  content  String
+  sender   User   @relation(fields: [senderId], references: [id])
+  senderId Int
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId Int
+
+  group     Group?   @relation(fields: [groupId], references: [id])
+  groupId   Int?
+  createdAt DateTime @default(now())
+}
+
+model Group {
+  id           Int          @id @default(autoincrement())
+  name         String
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  conversationId Int?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+
+  organizationId Int
+  messages       Message[]
+  members        GroupMember[]
+}
+
+model GroupMember {
+  user     User     @relation(fields: [userId], references: [id])
+  userId   Int
+  group    Group    @relation(fields: [groupId], references: [id])
+  groupId  Int
+  role     Role     @default(MEMBER)
+  joinedAt DateTime @default(now())
+  @@id([userId, groupId])
+}
+
+model Conversation {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  participants ConversationMember[]
+  messages     Message[]
+  groups       Group[]
+}
+
+model ConversationMember {
+  user   User @relation(fields: [userId], references: [id])
+  userId Int
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId Int
+
+  @@id([userId, conversationId])
 }
