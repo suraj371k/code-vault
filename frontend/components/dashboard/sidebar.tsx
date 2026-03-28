@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   Sidebar,
@@ -17,7 +17,6 @@ import {
   Mail,
   SquareDashedBottomCode,
   LayoutDashboard,
-  Database,
   LogOut,
   ChevronsUpDown,
   Building2,
@@ -29,16 +28,13 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useLogout } from "@/hooks/auth/useLogout";
-import { useParams, useRouter } from "next/navigation";
-import { useProfile } from "@/hooks/auth/useProfile";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useOrganizations } from "@/hooks/organization/useOrganizations";
 import toast from "react-hot-toast";
 import {
   DropdownMenuTrigger,
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
   DropdownMenuItem,
 } from "../ui/dropdown-menu";
 import InviteMembersDialog from "../invite-member";
@@ -59,21 +55,20 @@ const items = [
 ];
 
 const DashboardSidebar = () => {
-  const [activeId, setActiveId] = useState(0);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [orgOpen, setOrgOpen] = useState(false);
-  const { data, isPending, error } = useOrganizations();
+  const { data, isPending } = useOrganizations();
   const { slug } = useParams();
+  const pathname = usePathname();
 
   const { mutate, isPending: loading } = useLogout();
-
   const router = useRouter();
 
   const handleLogout = () => {
     mutate(undefined, {
       onSuccess: () => {
         toast.success("Logged out successfully");
-        router.push("/login");
+        router.push("/");
       },
       onError: (err: Error) => {
         toast.error(err.message || "Logout failed. Please try again.");
@@ -81,7 +76,31 @@ const DashboardSidebar = () => {
     });
   };
 
-  const activeOrganization = data?.find((org) => org.slug === slug);
+  const currentSlug = Array.isArray(slug) ? slug[0] : slug;
+  const activeOrganization = data?.find((org) => org.slug === currentSlug);
+
+  // Derive active item from the current URL — works on refresh, back/forward, direct navigation
+  const activeId = (() => {
+    // Sort by descending path length so more specific paths match first
+    // e.g. /dashboard/snippets matches before /dashboard
+    const sorted = [...items].sort((a, b) => b.path.length - a.path.length);
+    const match = sorted.find((item) =>
+      pathname.includes(item.path.replace("/dashboard", "dashboard"))
+    );
+    return match?.id ?? 0;
+  })();
+
+  useEffect(() => {
+    if (isPending || !data?.length) return;
+
+    const hasValidSlug = currentSlug
+      ? data.some((org) => org.slug === currentSlug)
+      : false;
+
+    if (!hasValidSlug) {
+      router.replace(`/organization/${data[0].slug}/dashboard`);
+    }
+  }, [data, isPending, slug, router]);
 
   return (
     <div
@@ -90,7 +109,7 @@ const DashboardSidebar = () => {
     >
       <Sidebar
         collapsible="icon"
-        className="border-r border-teal-950/60 bg-[#0a0a0f] text-zinc-100 relative overflow-hidden !h-screen"
+        className="border-r border-teal-950/60 bg-[#0a0a0f] text-zinc-100 relative overflow-hidden h-screen!"
       >
         <div
           className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full"
@@ -289,7 +308,6 @@ const DashboardSidebar = () => {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      onClick={() => setActiveId(item.id)}
                       className="group/item relative flex items-center gap-3 px-3 py-2.5 rounded-[10px] transition-colors duration-200 border"
                       style={
                         isActive
@@ -376,7 +394,7 @@ const DashboardSidebar = () => {
             transition={{ duration: 0.4, delay: 0.38, ease: "easeOut" }}
             className="space-y-1"
           >
-            {/* â”€â”€ Logout Button â”€â”€ */}
+            {/* ── Logout Button ── */}
             <motion.button
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
@@ -396,7 +414,7 @@ const DashboardSidebar = () => {
               </div>
 
               <span className="group-data-[collapsible=icon]:hidden text-[13px] font-medium text-zinc-500 group-hover/logout:text-red-400 transition-colors duration-200">
-                {loading ? "Loging out..." : "Logout"}
+                {loading ? "Logging out..." : "Logout"}
               </span>
             </motion.button>
           </motion.div>
@@ -407,6 +425,3 @@ const DashboardSidebar = () => {
 };
 
 export default DashboardSidebar;
-
-
-

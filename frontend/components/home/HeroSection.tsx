@@ -2,6 +2,7 @@
 import { Play, ArrowRight, Zap, Wand2 } from 'lucide-react';
 import { Particles } from './Particles';
 import { TypewriterHeadline } from './TypewriterHeadline';
+import Link from 'next/link';
 
 /* ── Animated code token: each token fades/slides in with a stagger ── */
 function Token({ children, color, delay = 0 }: { children: React.ReactNode; color: string; delay?: number }) {
@@ -60,10 +61,10 @@ export function HeroSection() {
 
         {/* CTAs */}
         <div className="hero-animate-4 flex flex-col sm:flex-row gap-4 justify-center mb-16">
-          <button className="px-8 py-4 teal-btn rounded-xl font-bold text-base flex items-center justify-center gap-2">
+          <Link href={'/signup'} className="px-8 py-4 teal-btn rounded-xl font-bold text-base flex items-center justify-center gap-2">
             Start Free — No Card Needed
             <ArrowRight className="w-4 h-4" />
-          </button>
+          </Link>
           <button className="px-8 py-4 outline-btn rounded-xl font-semibold text-base flex items-center justify-center gap-2">
             <Play className="w-4 h-4" />
             Watch 2-min Demo

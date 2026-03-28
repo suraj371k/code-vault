@@ -2,9 +2,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useRouter, usePathname } from "next/navigation";
-import { useOrganizations } from "@/hooks/organization/useOrganizations";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
@@ -16,33 +14,6 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-
-// Auth routes that should never trigger the redirect logic
-const AUTH_PATHS = ["/login", "/signup", "/"];
-
-function RootRedirect() {
-  const { data: org, isPending, error } = useOrganizations();
-  const router = useRouter();
-  const pathname = usePathname();
-
-  useEffect(() => {
-    // Only auto-redirect from the bare root path "/"
-    if (pathname !== "/") return;
-    // Wait until the query has settled
-    if (isPending) return;
-    // If there's an error (e.g. 401 – not logged in), stay on "/"
-    // so the landing page or login can handle it
-    if (error) return;
-    // Logged-in user with no org yet → create one
-    if (!org || (Array.isArray(org) && org.length === 0)) {
-      router.push("/organization/create");
-    } else if (Array.isArray(org) && org.length > 0) {
-      router.push(`/organization/${org[0].slug}/dashboard`);
-    }
-  }, [org, isPending, error, router, pathname]);
-
-  return null;
-}
 
 export default function RootLayout({
   children,
@@ -114,7 +85,6 @@ export default function RootLayout({
               },
             }}
           />
-          <RootRedirect />
           {children}
         </body>
       </QueryClientProvider>

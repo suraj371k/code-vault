@@ -1,7 +1,7 @@
 import { User } from "./auth";
 
 export interface Organizations {
-  id: number;
+  id: string;
   name: string;
   slug: string;
   role: Role;
@@ -14,15 +14,15 @@ export interface OrganizationInput {
 type Role = "MEMBER" | "OWNER";
 
 interface Members {
-  id: number;
-  userId: number;
-  organizationId: number;
+  id: string;
+  userId: string;
+  organizationId: string;
   role: Role;
   user: User;
 }
 
 export interface Organization {
-  id: number;
+  id: string;
   name: string;
   slug: string;
   members?: Members[];
@@ -30,15 +30,15 @@ export interface Organization {
 
 export interface MembershipInput {
   email: string;
-}
+} 
 
 export interface MembershipResponse {
   success: boolean;
   message: string;
   data: {
-    id: number;
-    userId: number;
-    organizationId: number;
+    id: string;
+    userId: string;
+    organizationId: string;
     role: string;
   };
 }

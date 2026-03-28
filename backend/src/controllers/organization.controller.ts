@@ -1,8 +1,7 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
-import slugify from "slugify";
 
-const generateSlug = (name: string): string => {
+export const generateSlug = (name: string): string => {
   return name
     .trim()
     .toLowerCase()
@@ -12,7 +11,7 @@ const generateSlug = (name: string): string => {
     .replace(/^-|-$/g, "");
 };
 
-const generateUniqueSlug = async (name: string): Promise<string> => {
+export const generateUniqueSlug = async (name: string): Promise<string> => {
   const baseSlug = generateSlug(name);
   const existing = await prisma.organization.findUnique({
     where: { slug: baseSlug },
@@ -148,13 +147,23 @@ export const getMembers = async (req: Request, res: Response) => {
         organizationId,
       },
       include: {
-        user: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            createdAt: true,
+          }
+        }
       },
     });
+
+    const totalMembers = await prisma.membership.count({where: {organizationId}});
 
     return res.status(200).json({
       success: true,
       message: "members fetched successfully",
+      total: totalMembers,
       data: members,
     });
   } catch (error) {
@@ -236,6 +245,62 @@ export const getMyOrganizations = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(`error in get all organization controller: ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const deleteOrganization = async (req: Request, res: Response) => {
+  try {
+    const organizationId = Number(req.params.organizationId);
+    const userId = (req as any).user.userId;
+
+    const membership = await prisma.membership.findFirst({
+      where: { organizationId, userId, role: "OWNER" },
+    });
+
+    if (!membership) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    await prisma.organization.delete({
+      where: {
+        id: organizationId,
+      },
+    });
+
+    return res
+      .status(200)
+      .json({ success: true, message: "organization deleted successfully" });
+  } catch (error) {
+    console.error(`error in deleting organization ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+// remove member from organization
+export const removeMember = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+
+    const removerId = Number(req.params.removerId);
+
+    const user = await prisma.user.findFirst({
+      where: { id: userId },
+    });
+
+    await prisma.membership.delete({
+      where: { id: removerId },
+    });
+
+    return res
+      .status(200)
+      .json({ success: true, message: "member removed successfully" });
+  } catch (error) {
+    console.error(`error in removing member: ${error}`);
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });
