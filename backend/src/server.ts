@@ -3,7 +3,6 @@ import http from 'http'
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import { Server } from "socket.io";
 
 //routes imports
 import authRoutes from "./routes/auth.routes.js";

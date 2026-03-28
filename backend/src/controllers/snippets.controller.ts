@@ -13,11 +13,11 @@ function toLanguage(raw: unknown): Language | undefined {
   return undefined;
 }
 
-// controllers 
+// controllers
 
 export const createSnippets = async (req: Request, res: Response) => {
   try {
-    const userId: number = (req as any).user.userId;
+    const userId = (req as any).user.userId;
     const organizationId = Number(req.params.organizationId);
 
     if (!organizationId) {
@@ -50,7 +50,7 @@ export const createSnippets = async (req: Request, res: Response) => {
         .json({ success: false, message: "title and code are required" });
     }
 
-    // Validate language against enum — reject unknown values early
+    // Validate language against enum
     const parsedLanguage = toLanguage(language);
     if (language && !parsedLanguage) {
       return res.status(400).json({
@@ -59,7 +59,10 @@ export const createSnippets = async (req: Request, res: Response) => {
       });
     }
 
-    const { summary, tags } = await generateSummary(parsedLanguage ?? null, code);
+    const { summary, tags } = await generateSummary(
+      parsedLanguage ?? null,
+      code,
+    );
 
     const snippet = await prisma.snippet.create({
       data: {
@@ -104,7 +107,6 @@ export const getOrganizationSnippet = async (req: Request, res: Response) => {
     const skip = (page - 1) * limit;
     const category = req.query.category as string | undefined;
 
-    // Base filter — always scoped to this org
     const baseWhere: Record<string, unknown> = { organizationId };
     if (category) {
       baseWhere.category = { equals: category, mode: "insensitive" };
@@ -129,10 +131,7 @@ export const getOrganizationSnippet = async (req: Request, res: Response) => {
       }
 
       whereClause = {
-        AND: [
-          baseWhere,
-          { OR: orClauses },
-        ],
+        AND: [baseWhere, { OR: orClauses }],
       };
     }
 

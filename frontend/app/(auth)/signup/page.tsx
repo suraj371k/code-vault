@@ -44,7 +44,7 @@ const Signup = () => {
     mutate(data, {
       onSuccess: () => {
         toast.success("Account created! Welcome aboard 🎉");
-        router.push("/organization/create");
+        router.push("/");
       },
       onError: (err: Error) => {
         toast.error(err.message || "Signup failed. Please try again.");

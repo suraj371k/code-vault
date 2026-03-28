@@ -2,6 +2,7 @@
 
 import ChatList from '@/components/teams/chat-list'
 import ChatWindow from '@/components/teams/chat-window'
+import GroupChatWindow from '@/components/teams/group-chat-window'
 import { useProfile } from '@/hooks/auth/useProfile'
 import { Conversation } from '@/types/conversations'
 import { MessageCircle } from 'lucide-react'
@@ -9,30 +10,55 @@ import React, { useState } from 'react'
 
 const Teams = () => {
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
+  const [activeGroup, setActiveGroup] = useState<{ id: number; name: string } | null>(null)
 
   const { data: profile } = useProfile()
   const currentUserId = profile?.id ? Number(profile.id) : undefined
 
+  const handleSelectConversation = (conv: Conversation) => {
+    setActiveConversation(conv)
+    setActiveGroup(null)
+  }
+
+  const handleSelectGroup = (group: { id: number; name: string }) => {
+    setActiveGroup(group)
+    setActiveConversation(null)
+  }
+
   return (
+    // Escape the layout's p-4 by using negative margin, then fill the exact remaining height
     <div
-      className="flex h-[calc(100vh-4rem)] overflow-hidden rounded-xl border"
-      style={{ borderColor: 'rgba(20,184,166,0.12)', background: '#0a0a0f' }}
+      className="-m-4 flex overflow-hidden rounded-xl border"
+      style={{
+        height: 'calc(100vh - 4rem)',
+        borderColor: 'rgba(20,184,166,0.12)',
+        background: '#0a0a0f',
+      }}
     >
+      {/* Chat list sidebar */}
       <div
         className="w-72 shrink-0 flex flex-col border-r overflow-hidden"
         style={{ borderColor: 'rgba(20,184,166,0.1)' }}
       >
         <ChatList
-          onSelect={(conv) => setActiveConversation(conv)}
+          onSelect={handleSelectConversation}
+          onSelectGroup={handleSelectGroup}
           selectedId={activeConversation?.id}
+          selectedGroupId={activeGroup?.id}
           currentUserId={currentUserId}
         />
       </div>
 
-      <div className="flex-1 min-w-0 relative">
+      {/* Main chat area */}
+      <div className="flex-1 min-w-0 relative overflow-hidden">
         {activeConversation ? (
           <ChatWindow
             conversation={activeConversation}
+            currentUserId={currentUserId}
+          />
+        ) : activeGroup ? (
+          <GroupChatWindow
+            group={activeGroup}
             currentUserId={currentUserId}
           />
         ) : (

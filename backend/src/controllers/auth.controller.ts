@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { generateUniqueSlug } from "./organization.controller.js";
 
 export const signup = async (req: Request, res: Response) => {
   try {
@@ -25,12 +26,38 @@ export const signup = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUser = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-      },
+    const defaultOrganizationName = `${name}'s Organization`;
+
+    const slug = await generateUniqueSlug(defaultOrganizationName);
+
+    // create new user + default organization
+    const newUser = await prisma.$transaction(async (tx) => {
+      const createUser = await tx.user.create({
+        data: {
+          name,
+          email,
+          password: hashedPassword,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true
+        },
+      });
+
+      await tx.organization.create({
+        data: {
+          name: defaultOrganizationName,
+          slug,
+          members: {
+            create: {
+              userId: createUser.id,
+              role: "OWNER",
+            },
+          },
+        },
+      });
+      return createUser;
     });
 
     const token = jwt.sign(
