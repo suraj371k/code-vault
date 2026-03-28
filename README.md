@@ -9,14 +9,16 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 
 ## 🧠 Features
 
-- 🔐 User Authentication (JWT-based)
-- ✍️ Create and manage code snippets
-- 🤖 AI-powered code summarization
-- 💾 Save snippets and summaries in PostgreSQL
-- 🐳 Dockerized backend
-- 🚀 CI/CD pipeline with GitHub Actions
-- ☁️ Deployment on Render
-- 🗄 Database hosted on Supabase (PostgreSQL)
+-    User Authentication (JWT-based)
+-    Create and manage code snippets
+-    AI-powered code summarization
+-    Save snippets and summaries in PostgreSQL
+-    Real Time chat feature with socket.io (personal and group)
+-    Personalize chat-bot for each snippets
+-    Dockerized backend
+-    CI/CD pipeline with GitHub Actions
+-    Deployment on Render
+-    Database hosted on Supabase (PostgreSQL)
 
 ---
 
@@ -30,7 +32,7 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 - PostgreSQL (Supabase)
 
 ### Frontend
-- React
+- Next.js
 - TypeScript
 
 ### DevOps
@@ -73,4 +75,9 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 ---
 
 
-## Work In progress...
+## Real Time Chat Feature
+
+1. User joined organization
+2. Chat with organization members
+3. Can create group
+4. group is visible only to only member of the group
