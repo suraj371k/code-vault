@@ -21,7 +21,7 @@ export default function InviteMembersDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  organizationId: number;
+  organizationId: any;
 }) {
   const [email, setEmail] = useState("");
 

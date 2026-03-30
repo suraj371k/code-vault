@@ -22,6 +22,7 @@ import {
   Building2,
   Plus,
   UserPlus,
+  Bell,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -48,10 +49,13 @@ const items = [
     title: "Snippets",
     icon: SquareDashedBottomCode,
   },
-  { id: 2, path: "/dashboard/fav", title: "Favorites", icon: Heart },
-  { id: 3, path: "/dashboard/recent", title: "Recent", icon: Clock },
   { id: 4, path: "/dashboard/teams", title: "Teams", icon: Mail },
-  { id: 5, path: "/dashboard/collections", title: "Collections", icon: Folder },
+  {
+    id: 5,
+    path: "/dashboard/notifications",
+    title: "Notifications",
+    icon: Bell,
+  },
 ];
 
 const DashboardSidebar = () => {
@@ -85,7 +89,7 @@ const DashboardSidebar = () => {
     // e.g. /dashboard/snippets matches before /dashboard
     const sorted = [...items].sort((a, b) => b.path.length - a.path.length);
     const match = sorted.find((item) =>
-      pathname.includes(item.path.replace("/dashboard", "dashboard"))
+      pathname.includes(item.path.replace("/dashboard", "dashboard")),
     );
     return match?.id ?? 0;
   })();

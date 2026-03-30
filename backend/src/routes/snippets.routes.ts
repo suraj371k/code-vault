@@ -1,36 +1,51 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import {
+  addExistingSnippetToCollection,
+  addToFav,
+  createCollection,
   createSnippets,
+  createSnippetToCollection,
   deleteSnippet,
   getAllLanguages,
+  getCollections,
+  getCollectionSnippets,
   getOrganizationSnippet,
   getSnippetById,
+  removeFromFav,
   updateSnippets,
 } from "../controllers/snippets.controller.js";
 
 const router = Router();
 
-//create snippet
+// ── Snippet CRUD ──────────────────────────────────────────
 router.post("/:organizationId", authMiddleware, createSnippets);
-
-//get all snippets
-router.get(
-  "/organization/:organizationId",
-  authMiddleware,
-  getOrganizationSnippet,
-);
-
-//get snippet by id
+router.get("/organization/:organizationId", authMiddleware, getOrganizationSnippet);
 router.get("/:snippetId", authMiddleware, getSnippetById);
-
-//delete snippet
 router.delete("/:snippetId", authMiddleware, deleteSnippet);
-
-//update snippet
 router.patch("/:snippetId", authMiddleware, updateSnippets);
 
-// get all languages route
-router.get('/all/languages' , getAllLanguages)
+// ── Languages ─────────────────────────────────────────────
+router.get("/all/languages", getAllLanguages);
+
+// ── Collections ───────────────────────────────────────────
+// List all collections for an org
+router.get("/collections/:organizationId", authMiddleware, getCollections);
+
+// Create a new collection
+router.post("/collection/:organizationId", authMiddleware, createCollection);
+
+// Create a brand-new snippet directly inside a collection
+router.post("/collection/:colId/:orgId", authMiddleware, createSnippetToCollection);
+
+// Fetch all snippets that belong to a collection
+router.get("/collection/:colId", authMiddleware, getCollectionSnippets);
+
+// Add an EXISTING snippet to an existing collection
+router.patch("/:snippetId/collection/:colId", authMiddleware, addExistingSnippetToCollection);
+
+// ── Favourites ────────────────────────────────────────────
+router.patch("/:snippetId/fav", authMiddleware, addToFav);
+router.patch("/:snippetId/unfav", authMiddleware, removeFromFav);
 
 export default router;

@@ -3,13 +3,14 @@ import http from 'http'
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { initSocket } from "./lib/socket.js";
 
 //routes imports
 import authRoutes from "./routes/auth.routes.js";
 import snippetRoutes from "./routes/snippets.routes.js";
 import organizationRoutes from './routes/organization.routes.js'
 import messageRoutes from './routes/message.routes.js'
-import { initSocket } from "./lib/socket.js";
+import aiRoutes from './routes/ai.routes.js'
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/snippets", snippetRoutes);
 app.use('/api/organization', organizationRoutes);
 app.use('/api/messages', messageRoutes)
+app.use('/api/ai', aiRoutes)
 
 const port = process.env.PORT!;
 

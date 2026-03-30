@@ -1,17 +1,47 @@
 import { User } from "./auth";
 import { Organization } from "./organization";
 
-// Mirrors the Prisma Language enum exactly
 export type Language =
-  | "JAVASCRIPT" | "TYPESCRIPT" | "HTML" | "CSS"
-  | "PYTHON" | "JAVA" | "CSHARP" | "GO" | "RUST" | "RUBY" | "PHP"
-  | "KOTLIN" | "SWIFT" | "SCALA" | "ELIXIR" | "HASKELL" | "ERLANG" | "CLOJURE"
-  | "C" | "CPP" | "ZIG" | "ASM"
-  | "R" | "MATLAB" | "JULIA"
-  | "BASH" | "POWERSHELL" | "DOCKERFILE" | "YAML" | "TOML"
-  | "SQL" | "PLSQL" | "GRAPHQL"
-  | "DART" | "OBJC"
-  | "LUA" | "PERL" | "GROOVY" | "SOLIDITY" | "VIM";
+  | "JAVASCRIPT"
+  | "TYPESCRIPT"
+  | "HTML"
+  | "CSS"
+  | "PYTHON"
+  | "JAVA"
+  | "CSHARP"
+  | "GO"
+  | "RUST"
+  | "RUBY"
+  | "PHP"
+  | "KOTLIN"
+  | "SWIFT"
+  | "SCALA"
+  | "ELIXIR"
+  | "HASKELL"
+  | "ERLANG"
+  | "CLOJURE"
+  | "C"
+  | "CPP"
+  | "ZIG"
+  | "ASM"
+  | "R"
+  | "MATLAB"
+  | "JULIA"
+  | "BASH"
+  | "POWERSHELL"
+  | "DOCKERFILE"
+  | "YAML"
+  | "TOML"
+  | "SQL"
+  | "PLSQL"
+  | "GRAPHQL"
+  | "DART"
+  | "OBJC"
+  | "LUA"
+  | "PERL"
+  | "GROOVY"
+  | "SOLIDITY"
+  | "VIM";
 
 export type CreateSnippetInput = {
   title: string;
@@ -39,6 +69,8 @@ export interface Snippet {
   tags: string[];
   created_at: string;
   code: string;
+  isFav?: boolean | null;
+  collections?: { id: number; name: string }[];
   author: User;
   organization: Organization;
 }
@@ -50,4 +82,16 @@ export interface SnippetResponse {
   total: number;
   totalPages: number;
   data: Snippet[];
+}
+
+export interface Collection {
+  id: number;
+  name: string;
+  organizationId: number;
+  created_at: string;
+  snippets?: { id: number }[];
+}
+
+export interface CollectionWithSnippets extends Collection {
+  snippets: Snippet[];
 }
