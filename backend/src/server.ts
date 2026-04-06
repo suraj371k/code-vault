@@ -11,6 +11,7 @@ import snippetRoutes from "./routes/snippets.routes.js";
 import organizationRoutes from './routes/organization.routes.js'
 import messageRoutes from './routes/message.routes.js'
 import aiRoutes from './routes/ai.routes.js'
+import notificationRoutes from './routes/notification.routes.js'
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ app.use("/api/snippets", snippetRoutes);
 app.use('/api/organization', organizationRoutes);
 app.use('/api/messages', messageRoutes)
 app.use('/api/ai', aiRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 const port = process.env.PORT!;
 

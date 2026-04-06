@@ -5,13 +5,13 @@ import { GetGroupsResponse } from "@/types/conversations";
 import { useQuery } from "@tanstack/react-query";
 import { messageQueryKeys } from "./keys";
 
-export const useGetGroupsAll = () => {
+export const useGetGroupsAll = (organizationId: number | undefined) => {
   return useQuery<GetGroupsResponse, Error>({
-    queryKey: messageQueryKeys.groupsAll(),
+    queryKey: [...messageQueryKeys.groupsAll(), organizationId],
+    enabled: !!organizationId,
     queryFn: async () => {
-      const res = await api.get("/api/messages/groups/all");
+      const res = await api.get(`/api/messages/groups/org/${organizationId}`);
       return res.data;
     },
   });
 };
-

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+﻿import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { generateSummary } from "../services/generate-summary.js";
 import { Language } from "../generated/prisma/enums.js";
@@ -77,6 +77,23 @@ export const createSnippets = async (req: Request, res: Response) => {
         organizationId,
       },
     });
+    
+    const members = await prisma.membership.findMany({
+      where: { organizationId },
+      select: { userId: true },
+    });
+
+    await prisma.notification.createMany({
+      data: members
+        .filter(member => member.userId !== userId)
+        .map(member => ({
+          userId: member.userId,
+          organizationId,
+          type: 'SNIPPET',
+          message: `${title} snippet created`,
+          snippetId: snippet.id,
+        })),
+    });
 
     return res.status(201).json({
       success: true,
@@ -112,20 +129,18 @@ export const getOrganizationSnippet = async (req: Request, res: Response) => {
       baseWhere.category = { equals: category, mode: "insensitive" };
     }
 
-    // Build search OR — language is an enum so we match it by value, not substring
+    // Build search OR
     let whereClause: Record<string, unknown> = baseWhere;
 
     if (search) {
-      const langMatch = toLanguage(search); // e.g. "typescript" → Language.TYPESCRIPT
+      const langMatch = toLanguage(search);
 
       const orClauses: Record<string, unknown>[] = [
         { title: { contains: search, mode: "insensitive" } },
         { code: { contains: search, mode: "insensitive" } },
-        // summary is String[] — Prisma supports `has` for scalar list equality
         { summary: { has: search } },
       ];
 
-      // Only add language filter if the search term maps to a valid enum value
       if (langMatch) {
         orClauses.push({ language: { equals: langMatch } });
       }
@@ -149,6 +164,7 @@ export const getOrganizationSnippet = async (req: Request, res: Response) => {
           summary: true,
           tags: true,
           code: true,
+          isFav: true,
           created_at: true,
           author: {
             select: { id: true, name: true, email: true },
@@ -197,7 +213,9 @@ export const getSnippetById = async (req: Request, res: Response) => {
         category: true,
         summary: true,
         tags: true,
+        isFav: true,
         created_at: true,
+        collections: { select: { id: true, name: true } },
         author: {
           select: { id: true, name: true, email: true },
         },
@@ -433,7 +451,20 @@ export const getCollectionSnippets = async (req: Request, res: Response) => {
     const collection = await prisma.collection.findUnique({
       where: { id: colId },
       include: {
-        snippets: true,
+        snippets: {
+          select: {
+            id: true,
+            title: true,
+            code: true,
+            language: true,
+            category: true,
+            summary: true,
+            tags: true,
+            isFav: true,
+            created_at: true,
+            author: { select: { id: true, name: true, email: true } },
+          },
+        },
       },
     });
 
@@ -460,16 +491,38 @@ export const addToFav = async (req: Request, res: Response) => {
         .json({ success: false, message: "snippet id is required" });
     }
 
+    // Fetch current isFav value first so we can properly toggle it
+    const existing = await prisma.snippet.findUnique({
+      where: { id: snippetId },
+      select: { isFav: true },
+    });
+
+    if (!existing) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Snippet not found" });
+    }
+
     const favSnippet = await prisma.snippet.update({
       where: { id: snippetId },
-      data: {
+      data: { isFav: !existing.isFav },
+      select: {
+        id: true,
+        title: true,
         isFav: true,
+        language: true,
+        category: true,
+        summary: true,
+        tags: true,
+        code: true,
+        created_at: true,
+        author: { select: { id: true, name: true, email: true } },
       },
     });
 
     return res.status(200).json({
       success: true,
-      message: "snippet added in favourite list",
+      message: favSnippet.isFav ? "Snippet added to favourites" : "Snippet removed from favourites",
       data: favSnippet,
     });
   } catch (error) {
@@ -526,10 +579,60 @@ export const removeFromFav = async (req: Request, res: Response) => {
     const updated = await prisma.snippet.update({
       where: { id: snippetId },
       data: { isFav: false },
+      select: {
+        id: true,
+        title: true,
+        isFav: true,
+        language: true,
+        category: true,
+        summary: true,
+        tags: true,
+        code: true,
+        created_at: true,
+        author: { select: { id: true, name: true, email: true } },
+      },
     });
     return res.status(200).json({ success: true, message: "Removed from favourites", data: updated });
   } catch (error) {
     console.error(`error in removeFromFav: ${error}`);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const getFavSnippets = async (req: Request, res: Response) => {
+  try {
+    const organizationId = Number(req.params.organizationId)
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId }
+    })
+
+    if (!organization) {
+      return res.status(404).json({ success: false, message: "organization not found" })
+    }
+
+    const favs = await prisma.snippet.findMany({
+      where: { isFav: true, organizationId }
+    })
+
+    return res.status(200).json({ success: true, message: "favourite fetched success", data: favs })
+
+  } catch (error) {
+    console.error(`error in get fav snippets : ${error}`)
+    return res.status(500).json({ success: false, message: "internal server error" })
+  }
+}
+
+export const deleteCollection = async (req: Request, res: Response) => {
+  try {
+    const colId = Number(req.params.colId);
+    if (!colId) {
+      return res.status(400).json({ success: false, message: "collection id is required" });
+    }
+    await prisma.collection.delete({ where: { id: colId } });
+    return res.status(200).json({ success: true, message: "Collection deleted successfully" });
+  } catch (error) {
+    console.error(`error in deleteCollection: ${error}`);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

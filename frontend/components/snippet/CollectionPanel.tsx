@@ -24,7 +24,6 @@ interface CollectionPanelProps {
   snippetId: number;
   organizationId: number;
   isFav?: boolean | null;
-  /** ids of collections this snippet already belongs to */
   currentCollectionIds?: number[];
 }
 

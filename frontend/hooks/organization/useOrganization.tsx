@@ -9,5 +9,8 @@ export const useOrganization = (slug: string) => {
       const response = await api.get(`/api/organization/${slug}`);
       return response.data.data;
     },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    enabled: !!slug,
   });
 };

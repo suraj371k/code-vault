@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useGetConversations } from "@/hooks/teams/useGetConversations";
 import { useProfile } from "@/hooks/auth/useProfile";
@@ -23,7 +23,10 @@ import { useGetUserGroups } from "@/hooks/teams/useGetUserGroups";
 import CreateGroupModal from "./create-group-modal";
 import toast from "react-hot-toast";
 import { SkeletonItem } from "./skeleton";
-
+import { socket } from "@/lib/socket";
+import { useQueryClient } from "@tanstack/react-query";
+import { messageQueryKeys } from "@/hooks/teams/keys";
+import { useEffect } from "react";
 
 /* ─── helpers ─── */
 
@@ -61,11 +64,10 @@ function avatarGradient(id: number) {
 
 function getOtherParticipants(conversation: Conversation, myId: number) {
   const others = conversation.participants.filter(
-    (p) => Number(p.userId) !== myId
+    (p) => Number(p.userId) !== myId,
   );
   return others.length > 0 ? others : conversation.participants;
 }
-
 
 /* ─── ConversationItem ─── */
 
@@ -98,7 +100,7 @@ function ConversationItem({
         "w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group relative text-left",
         isActive
           ? "border border-teal-500/25"
-          : "border border-transparent hover:border-teal-900/40"
+          : "border border-transparent hover:border-teal-900/40",
       )}
       style={
         isActive
@@ -167,7 +169,7 @@ function ConversationItem({
               "text-[13px] font-semibold truncate leading-none",
               isActive
                 ? "text-teal-100"
-                : "text-zinc-200 group-hover:text-zinc-100"
+                : "text-zinc-200 group-hover:text-zinc-100",
             )}
           >
             {others.map((p) => p.user.name).join(", ")}
@@ -186,7 +188,7 @@ function ConversationItem({
             "text-[11.5px] truncate mt-1 leading-none",
             isActive
               ? "text-teal-400/70"
-              : "text-zinc-500 group-hover:text-zinc-400"
+              : "text-zinc-500 group-hover:text-zinc-400",
           )}
         >
           {lastMessage
@@ -214,7 +216,7 @@ function GroupItem({ group, isActive, onClick }: GroupItemProps) {
         "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative text-left border",
         isActive
           ? "border-teal-500/25"
-          : "border-transparent hover:border-teal-900/40"
+          : "border-transparent hover:border-teal-900/40",
       )}
       style={
         isActive
@@ -248,7 +250,9 @@ function GroupItem({ group, isActive, onClick }: GroupItemProps) {
         <Users
           className={cn(
             "size-4",
-            isActive ? "text-teal-300" : "text-teal-600 group-hover:text-teal-500"
+            isActive
+              ? "text-teal-300"
+              : "text-teal-600 group-hover:text-teal-500",
           )}
           strokeWidth={1.8}
         />
@@ -259,7 +263,7 @@ function GroupItem({ group, isActive, onClick }: GroupItemProps) {
             "text-[12.5px] font-semibold truncate",
             isActive
               ? "text-teal-100"
-              : "text-zinc-300 group-hover:text-zinc-100"
+              : "text-zinc-300 group-hover:text-zinc-100",
           )}
         >
           {group.name}
@@ -320,7 +324,9 @@ function MemberItem({
         <p className="text-[12.5px] font-semibold truncate text-zinc-300 group-hover:text-zinc-100">
           {member.user.name}
         </p>
-        <p className="text-[11px] truncate text-zinc-600">{member.user.email}</p>
+        <p className="text-[11px] truncate text-zinc-600">
+          {member.user.email}
+        </p>
       </div>
 
       <div className="shrink-0 flex items-center gap-1">
@@ -388,23 +394,21 @@ const ChatList = ({
   const slug = params.slug as string;
 
   const { data: org } = useOrganization(slug);
-  const orgId = org?.id;
+  const orgId = org?.id ? Number(org.id) : undefined;
 
   // Org members (to start conversations)
   const { data: membersData } = useGetMembers(orgId);
-  const orgMembers = (membersData?.data ?? []).filter(
-    (m) => m.userId !== myId
-  );
+  const orgMembers = (membersData?.data ?? []).filter((m) => m.userId !== myId);
 
   // Existing conversations
   const {
     data: conversations,
     isPending: loadingConversations,
     error,
-  } = useGetConversations();
+  } = useGetConversations(orgId);
 
   // User's groups
-  const { data: groupsData } = useGetUserGroups();
+  const { data: groupsData } = useGetUserGroups(orgId);
   const groups = groupsData?.data ?? [];
 
   // Send first message to start a conversation
@@ -414,6 +418,33 @@ const ChatList = ({
 
   // Group modal state
   const [showGroupModal, setShowGroupModal] = useState(false);
+
+  // Sole owner of the socket connection — manages connect/disconnect and all global listeners
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!myId) return;
+    socket.connect();
+    socket.emit("join", myId);
+
+    // Refresh group list when this user is added to a group
+    const handleAddedToGroup = () => {
+      queryClient.invalidateQueries({ queryKey: [...messageQueryKeys.myGroups(), orgId] });
+    };
+
+    // Refresh conversation list when a new DM arrives (scoped to this org)
+    const handleNewMessage = () => {
+      queryClient.invalidateQueries({ queryKey: [...messageQueryKeys.conversations(), orgId] });
+    };
+
+    socket.on("addedToGroup", handleAddedToGroup);
+    socket.on("newMessage", handleNewMessage);
+
+    return () => {
+      socket.off("addedToGroup", handleAddedToGroup);
+      socket.off("newMessage", handleNewMessage);
+      socket.disconnect();
+    };
+  }, [myId, orgId, queryClient]);
 
   const [search, setSearch] = useState("");
 
@@ -429,22 +460,20 @@ const ChatList = ({
           return others.some(
             (p) =>
               p.user.name.toLowerCase().includes(search.toLowerCase()) ||
-              p.user.email.toLowerCase().includes(search.toLowerCase())
+              p.user.email.toLowerCase().includes(search.toLowerCase()),
           );
         })
       : list;
 
   const filteredGroups = search.trim()
-    ? groups.filter((g) =>
-        g.name.toLowerCase().includes(search.toLowerCase())
-      )
+    ? groups.filter((g) => g.name.toLowerCase().includes(search.toLowerCase()))
     : groups;
 
   const filteredMembers = search.trim()
     ? orgMembers.filter(
         (m) =>
           m.user.name.toLowerCase().includes(search.toLowerCase()) ||
-          m.user.email.toLowerCase().includes(search.toLowerCase())
+          m.user.email.toLowerCase().includes(search.toLowerCase()),
       )
     : orgMembers;
 
@@ -453,24 +482,24 @@ const ChatList = ({
     list.flatMap((c) =>
       c.participants
         .filter((p) => Number(p.userId) !== myId)
-        .map((p) => p.userId)
-    )
+        .map((p) => p.userId),
+    ),
   );
   const newMembers = filteredMembers.filter(
-    (m) => !membersWithConversation.has(m.userId)
+    (m) => !membersWithConversation.has(m.userId),
   );
 
   const handleStartChat = (receiverId: number, name: string) => {
     setStartingMemberId(receiverId);
     sendMessage(
-      { receiverId, content: "👋 Hey!" },
+      { receiverId, content: "👋 Hey!", organizationId: orgId! },
       {
         onSuccess: (res) => {
           setStartingMemberId(null);
           toast.success(`Conversation started with ${name}`);
           if (res?.data?.message?.conversationId) {
             const newConv = list.find(
-              (c) => c.id === res.data.message.conversationId
+              (c) => c.id === res.data.message.conversationId,
             );
             if (newConv) onSelect?.(newConv);
           }
@@ -478,10 +507,12 @@ const ChatList = ({
         onError: (err: any) => {
           setStartingMemberId(null);
           toast.error(
-            err?.response?.data?.message ?? err?.message ?? "Failed to start chat"
+            err?.response?.data?.message ??
+              err?.message ??
+              "Failed to start chat",
           );
         },
-      }
+      },
     );
   };
 
@@ -495,10 +526,7 @@ const ChatList = ({
         <div className="px-4 pt-4 pb-3 border-b border-teal-950/50 shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <MessageCircle
-                className="size-4 text-teal-500"
-                strokeWidth={2}
-              />
+              <MessageCircle className="size-4 text-teal-500" strokeWidth={2} />
               <h2 className="text-[13px] font-bold tracking-wide text-zinc-100">
                 Messages
               </h2>
@@ -564,9 +592,7 @@ const ChatList = ({
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
           {/* Loading skeletons */}
           {isLoading &&
-            Array.from({ length: 5 }).map((_, i) => (
-              <SkeletonItem key={i} />
-            ))}
+            Array.from({ length: 5 }).map((_, i) => <SkeletonItem key={i} />)}
 
           {/* Error */}
           {!isLoading && error && (
@@ -656,11 +682,17 @@ const ChatList = ({
                   }}
                 >
                   {search ? (
-                    <Search className="size-5 text-teal-600" strokeWidth={1.6} />
+                    <Search
+                      className="size-5 text-teal-600"
+                      strokeWidth={1.6}
+                    />
                   ) : orgMembers.length === 0 ? (
                     <Users className="size-5 text-teal-600" strokeWidth={1.6} />
                   ) : (
-                    <MessageCircle className="size-5 text-teal-600" strokeWidth={1.6} />
+                    <MessageCircle
+                      className="size-5 text-teal-600"
+                      strokeWidth={1.6}
+                    />
                   )}
                 </div>
                 <div>
@@ -668,15 +700,15 @@ const ChatList = ({
                     {search
                       ? "No results found"
                       : orgMembers.length === 0
-                      ? "No members in this organization"
-                      : "No conversations yet"}
+                        ? "No members in this organization"
+                        : "No conversations yet"}
                   </p>
-                  <p className="text-[11px] text-zinc-600 mt-0.5 max-w-[180px]">
+                  <p className="text-[11px] text-zinc-600 mt-0.5 max-w-45">
                     {search
                       ? "Try a different name or email"
                       : orgMembers.length === 0
-                      ? "Invite people to your organization to start messaging"
-                      : "Select a member above to start a conversation"}
+                        ? "Invite people to your organization to start messaging"
+                        : "Select a member above to start a conversation"}
                   </p>
                 </div>
               </div>
@@ -687,7 +719,7 @@ const ChatList = ({
       {/* Create Group Modal */}
       {showGroupModal && orgId && myId && (
         <CreateGroupModal
-          organizationId={orgId}
+          organizationId={Number(orgId)}
           currentUserId={myId}
           onClose={() => setShowGroupModal(false)}
           onCreated={() => setShowGroupModal(false)}

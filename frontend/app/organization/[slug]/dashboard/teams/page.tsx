@@ -1,11 +1,13 @@
-"use client"
+﻿"use client"
 
 import ChatList from '@/components/teams/chat-list'
 import ChatWindow from '@/components/teams/chat-window'
 import GroupChatWindow from '@/components/teams/group-chat-window'
 import { useProfile } from '@/hooks/auth/useProfile'
+import { useOrganization } from '@/hooks/organization/useOrganization'
 import { Conversation } from '@/types/conversations'
 import { MessageCircle } from 'lucide-react'
+import { useParams } from 'next/navigation'
 import React, { useState } from 'react'
 
 const Teams = () => {
@@ -14,6 +16,11 @@ const Teams = () => {
 
   const { data: profile } = useProfile()
   const currentUserId = profile?.id ? Number(profile.id) : undefined
+
+  const params = useParams()
+  const slug = params?.slug as string
+  const { data: org } = useOrganization(slug)
+  const organizationId = org?.id ? Number(org.id) : undefined
 
   const handleSelectConversation = (conv: Conversation) => {
     setActiveConversation(conv)
@@ -26,7 +33,6 @@ const Teams = () => {
   }
 
   return (
-    // Escape the layout's p-4 by using negative margin, then fill the exact remaining height
     <div
       className="-m-4 flex overflow-hidden rounded-xl border"
       style={{
@@ -35,7 +41,6 @@ const Teams = () => {
         background: '#0a0a0f',
       }}
     >
-      {/* Chat list sidebar */}
       <div
         className="w-72 shrink-0 flex flex-col border-r overflow-hidden"
         style={{ borderColor: 'rgba(20,184,166,0.1)' }}
@@ -49,17 +54,18 @@ const Teams = () => {
         />
       </div>
 
-      {/* Main chat area */}
       <div className="flex-1 min-w-0 relative overflow-hidden">
         {activeConversation ? (
           <ChatWindow
             conversation={activeConversation}
             currentUserId={currentUserId}
+            organizationId={organizationId}
           />
         ) : activeGroup ? (
           <GroupChatWindow
             group={activeGroup}
             currentUserId={currentUserId}
+            organizationId={organizationId}
           />
         ) : (
           <EmptyState />
@@ -75,8 +81,7 @@ function EmptyState() {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background:
-            'radial-gradient(ellipse 60% 40% at 50% 50%, rgba(20,184,166,0.06) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse 60% 40% at 50% 50%, rgba(20,184,166,0.06) 0%, transparent 70%)',
         }}
       />
       <div

@@ -7,6 +7,7 @@ import { messageMutationKeys, messageQueryKeys } from "./keys";
 
 export interface SendGroupMessageVars extends SendMessageInput {
   groupId: number;
+  organizationId: number;
 }
 
 export const useSendGroupMessage = () => {
@@ -14,10 +15,13 @@ export const useSendGroupMessage = () => {
 
   return useMutation<SendGroupMessageResponse, Error, SendGroupMessageVars>({
     mutationKey: messageMutationKeys.sendGroupMessage,
-    mutationFn: async ({ groupId, content }) => {
-      const res = await api.post(`/api/messages/groups/${groupId}/message`, {
-        content,
-      });
+    mutationFn: async ({ groupId, content, organizationId }) => {
+      const res = await api.post(
+        `/api/messages/groups/org/${organizationId}/${groupId}/message`,
+        {
+          content,
+        },
+      );
       return res.data;
     },
     onSuccess: (_data, vars) => {

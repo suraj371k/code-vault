@@ -7,6 +7,7 @@ import { messageMutationKeys, messageQueryKeys } from "./keys";
 
 export interface SendPersonalMessageVars extends SendMessageInput {
   receiverId: number;
+  organizationId: number;
 }
 
 export const useSendPersonalMessage = () => {
@@ -14,15 +15,17 @@ export const useSendPersonalMessage = () => {
 
   return useMutation<SendPersonalMessageResponse, Error, SendPersonalMessageVars>({
     mutationKey: messageMutationKeys.sendPersonalMessage,
-    mutationFn: async ({ receiverId, content }) => {
-      const res = await api.post(`/api/messages/personal/${receiverId}/message`, {
-        content,
-      });
+    mutationFn: async ({ receiverId, content, organizationId }) => {
+      const res = await api.post(
+        `/api/messages/personal/${organizationId}/${receiverId}/message`,
+        {
+          content,
+        },
+      );
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: messageQueryKeys.conversations() });
+    onSuccess: (_, { organizationId }) => {
+      queryClient.invalidateQueries({ queryKey: [...messageQueryKeys.conversations(), organizationId] });
     },
   });
 };
-

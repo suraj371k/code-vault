@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useEffect, useState } from "react";
 import CreateSnippetForm from "@/components/create-snippet-form";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useOrganization } from "@/hooks/organization/useOrganization";
 import { useSnippets } from "@/hooks/snippets/useSnippets";
 import { useCollectionSnippets } from "@/hooks/snippets/useCollectionSnippets";
+import { useFavSnippets } from "@/hooks/snippets/useFavSnippets";
 import { Snippet } from "@/types/snippets";
 import { useDeleteSnippets } from "@/hooks/snippets/useDeleteSnippets";
 import { useCopy } from "@/hooks/useCopy";
@@ -173,7 +174,7 @@ function SnippetRow({
       className="group cursor-pointer border-b border-zinc-800/50 transition-all duration-150 hover:bg-teal-950/20 hover:border-teal-900/40"
     >
       {/* Lang */}
-      <TableCell className="w-[90px] py-3.5 pl-4">
+      <TableCell className="w-22.5 py-3.5 pl-4">
         <span
           className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md whitespace-nowrap"
           style={{
@@ -188,14 +189,14 @@ function SnippetRow({
       </TableCell>
 
       {/* Title */}
-      <TableCell className="py-3.5 max-w-[240px]">
+      <TableCell className="py-3.5 max-w-60">
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold text-zinc-100 group-hover:text-teal-100 transition-colors truncate">
             {snippet.title}
           </span>
           {snippet.isFav && (
             <Heart
-              className="size-3 text-rose-400 flex-shrink-0"
+              className="size-3 text-rose-400 shrink-0"
               fill="currentColor"
             />
           )}
@@ -205,14 +206,14 @@ function SnippetRow({
           />
         </div>
         {snippet.summary?.length > 0 && (
-          <p className="text-[11px] text-zinc-600 truncate mt-0.5 max-w-[220px]">
+          <p className="text-[11px] text-zinc-600 truncate mt-0.5 max-w-55">
             {snippet.summary[0]}
           </p>
         )}
       </TableCell>
 
       {/* Category */}
-      <TableCell className="py-3.5 w-[120px]">
+      <TableCell className="py-3.5 w-30">
         {snippet.category ? (
           <Badge
             variant="outline"
@@ -226,7 +227,7 @@ function SnippetRow({
       </TableCell>
 
       {/* Tags */}
-      <TableCell className="py-3.5 w-[150px]">
+      <TableCell className="py-3.5 w-37.5">
         <div className="flex items-center gap-1 flex-wrap">
           {snippet.tags?.slice(0, 2).map((tag) => (
             <span
@@ -248,7 +249,7 @@ function SnippetRow({
       </TableCell>
 
       {/* Author */}
-      <TableCell className="py-3.5 w-[130px]">
+      <TableCell className="py-3.5 w-32.5">
         <div className="flex items-center gap-2">
           <div
             className="size-6 rounded-full flex items-center justify-center text-[10px] font-bold text-teal-300 shrink-0"
@@ -266,14 +267,14 @@ function SnippetRow({
       </TableCell>
 
       {/* Date */}
-      <TableCell className="py-3.5 w-[95px]">
+      <TableCell className="py-3.5 w-23.75">
         <span className="text-[11px] text-zinc-600 tabular-nums">
           {timeAgo(snippet.created_at)}
         </span>
       </TableCell>
 
       {/* Actions */}
-      <TableCell className="py-3.5 w-[72px] pr-4">
+      <TableCell className="py-3.5 w-18 pr-4">
         <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={(e) => {
@@ -328,7 +329,7 @@ function SkeletonRow() {
   );
 }
 
-/* ── Main page ───────────────────────────────────── */
+/*  Main page  */
 const Snippets = () => {
   const params = useParams();
   const slug = params?.slug as string;
@@ -354,7 +355,10 @@ const Snippets = () => {
   }, [activeFilter, debouncedSearch]);
 
   const { data: snippetData, isPending: snippetLoading } = useSnippets({
-    organizationId: organization?.id ?? 0,
+    organizationId:
+      typeof organization?.id === "string"
+        ? parseInt(organization.id, 10)
+        : (organization?.id ?? 0),
     page: currentPage,
     search: debouncedSearch,
   });
@@ -365,20 +369,38 @@ const Snippets = () => {
       activeFilter.type === "collection" ? activeFilter.id : null,
     );
 
+  /* ── Favourite snippets query (fetches ALL favs across all pages) */
+  const orgId =
+    typeof organization?.id === "string"
+      ? parseInt(organization.id, 10)
+      : (organization?.id ?? 0);
+  const { data: favSnippets = [], isLoading: favLoading } = useFavSnippets(
+    activeFilter.type === "fav" ? orgId : null,
+  );
+
   /* ── Derive the snippets to display ── */
   let displaySnippets: Snippet[] = [];
   let totalSnippets = 0;
   let totalPages = 1;
   const isLoading =
-    activeFilter.type === "collection" ? collectionLoading : snippetLoading;
+    activeFilter.type === "collection"
+      ? collectionLoading
+      : activeFilter.type === "fav"
+        ? favLoading
+        : snippetLoading;
 
   if (activeFilter.type === "all") {
     displaySnippets = snippetData?.data ?? [];
     totalSnippets = snippetData?.total ?? 0;
     totalPages = snippetData?.totalPages ?? 1;
   } else if (activeFilter.type === "fav") {
-    const all = snippetData?.data ?? [];
-    displaySnippets = all.filter((s) => s.isFav);
+    displaySnippets = debouncedSearch
+      ? favSnippets.filter(
+          (s) =>
+            s.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+            s.code.toLowerCase().includes(debouncedSearch.toLowerCase()),
+        )
+      : favSnippets;
     totalSnippets = displaySnippets.length;
     totalPages = 1;
   } else if (activeFilter.type === "collection") {
@@ -475,14 +497,22 @@ const Snippets = () => {
       <CreateSnippetForm
         open={open}
         onOpenChange={setOpen}
-        organizationId={organization.id}
+        organizationId={
+          typeof organization.id === "string"
+            ? parseInt(organization.id, 10)
+            : organization.id
+        }
       />
 
       {/* ── Main layout: sidebar + table ── */}
       <div className="flex gap-4 items-start">
         {/* Collections sidebar */}
         <CollectionsSidebar
-          organizationId={organization.id}
+          organizationId={
+            typeof organization.id === "string"
+              ? parseInt(organization.id, 10)
+              : organization.id
+          }
           activeFilter={activeFilter}
           onFilterChange={(f) => {
             setActiveFilter(f);

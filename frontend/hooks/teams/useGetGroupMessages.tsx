@@ -5,16 +5,17 @@ import { GetGroupMessagesResponse } from "@/types/conversations";
 import { useQuery } from "@tanstack/react-query";
 import { messageQueryKeys } from "./keys";
 
-export const useGetGroupMessages = (groupId?: number) => {
+export const useGetGroupMessages = (groupId?: number, organizationId?: number) => {
   return useQuery<GetGroupMessagesResponse, Error>({
     queryKey: groupId
-      ? messageQueryKeys.groupMessages(groupId)
+      ? [...messageQueryKeys.groupMessages(groupId), organizationId]
       : ["messages", "groups", "missing-id", "messages"],
     queryFn: async () => {
-      const res = await api.get(`/api/messages/groups/${groupId}`);
+      const res = await api.get(
+        `/api/messages/groups/org/${organizationId}/${groupId}/messages`,
+      );
       return res.data;
     },
-    enabled: Number.isFinite(groupId),
+    enabled: Number.isFinite(groupId) && Number.isFinite(organizationId),
   });
 };
-

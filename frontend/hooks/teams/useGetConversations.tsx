@@ -5,11 +5,16 @@ import { GetUserConversationsResponse } from "@/types/conversations";
 import { useQuery } from "@tanstack/react-query";
 import { messageQueryKeys } from "./keys";
 
-export const useGetConversations = () => {
+export const useGetConversations = (
+  organizationId: number | undefined,
+) => {
   return useQuery<GetUserConversationsResponse, Error>({
-    queryKey: messageQueryKeys.conversations(),
+    queryKey: [...messageQueryKeys.conversations(), organizationId],
+    enabled: !!organizationId,
     queryFn: async () => {
-      const res = await api.get("/api/messages/conversation");
+      const res = await api.get(
+        `/api/messages/conversation/org/${organizationId}`,
+      );
       return res.data;
     },
   });

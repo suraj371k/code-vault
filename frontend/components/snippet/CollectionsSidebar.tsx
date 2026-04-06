@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import {
@@ -10,12 +10,14 @@ import {
   Plus,
   Loader2,
   ChevronRight,
+  Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCollections } from "@/hooks/snippets/useCollections";
 import { useCreateCollection } from "@/hooks/snippets/useCreateCollection";
+import { useDeleteCollection } from "@/hooks/snippets/useDeleteCollection";
 import { cn } from "@/lib/utils";
 
 export type CollectionFilter =
@@ -38,7 +40,10 @@ export const CollectionsSidebar = ({
   const [newName, setNewName] = useState("");
 
   const { data: collections = [], isLoading } = useCollections(organizationId);
-  const { mutate: createCollection, isPending: creating } = useCreateCollection();
+  const { mutate: createCollection, isPending: creating } =
+    useCreateCollection();
+  const { mutate: deleteCollection, isPending: deleting } =
+    useDeleteCollection();
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -49,8 +54,13 @@ export const CollectionsSidebar = ({
           setNewName("");
           setShowCreate(false);
         },
-      }
+      },
     );
+  };
+
+  const handleDelete = (colId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteCollection({ colId, organizationId });
   };
 
   const isAll = activeFilter.type === "all";
@@ -58,7 +68,7 @@ export const CollectionsSidebar = ({
 
   return (
     <div
-      className="w-56 flex-shrink-0 rounded-2xl border border-zinc-800/60 bg-zinc-900/40 overflow-hidden"
+      className="w-56 shrink-0 rounded-2xl border border-zinc-800/60 bg-zinc-900/40 overflow-hidden"
       style={{
         backdropFilter: "blur(8px)",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)",
@@ -127,7 +137,12 @@ export const CollectionsSidebar = ({
 
         {/* Favourites */}
         <FilterItem
-          icon={<Heart className="w-3.5 h-3.5" fill={isFav ? "currentColor" : "none"} />}
+          icon={
+            <Heart
+              className="w-3.5 h-3.5"
+              fill={isFav ? "currentColor" : "none"}
+            />
+          }
           label="Favourites"
           active={isFav}
           onClick={() => onFilterChange({ type: "fav" })}
@@ -162,8 +177,14 @@ export const CollectionsSidebar = ({
                 count={col.snippets?.length}
                 active={active}
                 onClick={() =>
-                  onFilterChange({ type: "collection", id: col.id, name: col.name })
+                  onFilterChange({
+                    type: "collection",
+                    id: col.id,
+                    name: col.name,
+                  })
                 }
+                onDelete={(e) => handleDelete(col.id, e)}
+                deleting={deleting}
               />
             );
           })
@@ -188,13 +209,15 @@ export const CollectionsSidebar = ({
   );
 };
 
-/* ── Reusable nav item ── */
+/* ── Reusable nav item  */
 function FilterItem({
   icon,
   label,
   count,
   active,
   onClick,
+  onDelete,
+  deleting,
   accent = "teal",
 }: {
   icon: React.ReactNode;
@@ -202,6 +225,8 @@ function FilterItem({
   count?: number;
   active: boolean;
   onClick: () => void;
+  onDelete?: (e: React.MouseEvent) => void;
+  deleting?: boolean;
   accent?: "teal" | "rose";
 }) {
   const colors = {
@@ -218,30 +243,44 @@ function FilterItem({
   }[accent];
 
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "w-full flex items-center gap-2.5 px-4 py-2 text-left transition-all duration-150 text-[12px] font-medium",
-        active ? colors.active : colors.inactive
-      )}
-    >
-      <span className={cn("flex-shrink-0", active ? colors.icon : "")}>
-        {icon}
-      </span>
-      <span className="truncate flex-1">{label}</span>
-      {count !== undefined && (
-        <span
-          className={cn(
-            "flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-semibold",
-            active
-              ? "bg-teal-500/20 text-teal-400"
-              : "bg-zinc-800/60 text-zinc-600"
-          )}
+    <div className="group/item relative flex items-center">
+      <button
+        onClick={onClick}
+        className={cn(
+          "flex-1 flex items-center gap-2.5 px-4 py-2 text-left transition-all duration-150 text-[12px] font-medium",
+          active ? colors.active : colors.inactive,
+        )}
+      >
+        <span className={cn("shrink-0", active ? colors.icon : "")}>{icon}</span>
+        <span className="truncate flex-1">{label}</span>
+        {count !== undefined && (
+          <span
+            className={cn(
+              "shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-semibold",
+              active
+                ? "bg-teal-500/20 text-teal-400"
+                : "bg-zinc-800/60 text-zinc-600",
+            )}
+          >
+            {count}
+          </span>
+        )}
+        {active && !onDelete && <ChevronRight className="w-3 h-3 shrink-0 opacity-60" />}
+      </button>
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          title="Delete collection"
+          className="opacity-0 group-hover/item:opacity-100 mr-2 shrink-0 flex items-center justify-center w-5 h-5 rounded-md text-zinc-700 hover:text-red-400 hover:bg-red-950/40 transition-all duration-150"
         >
-          {count}
-        </span>
+          {deleting ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Trash2 className="w-3 h-3" />
+          )}
+        </button>
       )}
-      {active && <ChevronRight className="w-3 h-3 flex-shrink-0 opacity-60" />}
-    </button>
+    </div>
   );
 }

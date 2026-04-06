@@ -113,7 +113,7 @@ function MessageBubble({ message, isMine, showAvatar, isConsecutive }: BubblePro
 
         <div
           className={cn(
-            'relative px-3.5 py-2.5 text-[13px] leading-relaxed break-words',
+            'relative px-3.5 py-2.5 text-[13px] leading-relaxed wrap-break-word',
             isMine
               ? 'rounded-t-2xl rounded-bl-2xl rounded-br-md text-zinc-100'
               : 'rounded-t-2xl rounded-br-2xl rounded-bl-md text-zinc-200'
@@ -148,10 +148,11 @@ function MessageBubble({ message, isMine, showAvatar, isConsecutive }: BubblePro
 interface ChatWindowProps {
   conversation: Conversation
   currentUserId?: number
+  organizationId?: number
 }
 
-const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => {
-  const { data, isPending } = useGetConversationMessages(conversation.id)
+const ChatWindow = ({ conversation, currentUserId, organizationId }: ChatWindowProps) => {
+  const { data, isPending } = useGetConversationMessages(conversation.id, organizationId)
   const { mutate: sendMessage, isPending: sending, error } = useSendPersonalMessage()
 
   const [text, setText] = useState('')
@@ -176,24 +177,24 @@ const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => {
   useEffect(() => {
     if (!currentUserId) return;
 
-    socket.connect()
-
-    socket.emit('join', currentUserId)
-
-    socket.on('newMessage', ({ message }: { message: Message }) => {
-      if (message.conversationId == conversation.id) {
+    // socket connection is managed by chat-list (always mounted)
+    // we only register our specific listener here
+    // Named handler so off() only removes THIS listener, not all newMessage listeners
+    const handleNewMessage = ({ message }: { message: Message }) => {
+      // Only accept messages for THIS conversation
+      if (message.conversationId === conversation.id && !message.groupId) {
         setLocalMessages((prev) => {
           if (prev.some((m) => m.id === message.id)) return prev
           return [...prev, message]
         })
       }
-    })
-    return () => {
-      socket.off('newMessage')
-      socket.disconnect()
     }
 
+    socket.on('newMessage', handleNewMessage)
 
+    return () => {
+      socket.off('newMessage', handleNewMessage)
+    }
   }, [currentUserId, conversation.id])
 
 
@@ -224,7 +225,7 @@ const ChatWindow = ({ conversation, currentUserId }: ChatWindowProps) => {
     const content = text.trim()
     if (!content || !receiver) return
     sendMessage(
-      { receiverId: receiver.userId, content },
+      { receiverId: receiver.userId, content, organizationId: organizationId! },
       {
         onSuccess: () => setText(''),
         onError: (err: any) => {

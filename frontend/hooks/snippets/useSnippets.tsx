@@ -26,5 +26,7 @@ export const useSnippets = ({
     },
     placeholderData: keepPreviousData,
     enabled: !!organizationId,
+    staleTime: 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 };

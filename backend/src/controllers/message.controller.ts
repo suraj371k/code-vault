@@ -2,11 +2,24 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { getIO } from "../lib/socket.js";
 
+const parseParamInt = (value: string | undefined) => Number(value);
+
+const getAuthUserId = (req: Request) => Number((req as any).user?.userId);
+
+const isUserInOrganization = async (userId: number, organizationId: number) => {
+  const membership = await prisma.membership.findFirst({
+    where: { userId, organizationId },
+    select: { userId: true },
+  });
+  return !!membership;
+};
+
 export const createMessage = async (req: Request, res: Response) => {
   try {
     const { content } = req.body;
-
-    const receiverId = Number(req.params.receiverId);
+    const receiverId = parseParamInt(req.params.receiverId);
+    const organizationId = parseParamInt(req.params.organizationId);
+    const senderId = getAuthUserId(req);
 
     if (!Number.isFinite(receiverId)) {
       return res
@@ -14,9 +27,13 @@ export const createMessage = async (req: Request, res: Response) => {
         .json({ success: false, message: "Receiver ID is required" });
     }
 
-    const senderId = Number((req as any).user.userId);
+    if (!Number.isFinite(organizationId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Organization ID is required" });
+    }
 
-    if (!content) {
+    if (!content || typeof content !== "string" || !content.trim()) {
       return res
         .status(400)
         .json({ success: false, message: "Missing required fields" });
@@ -26,10 +43,28 @@ export const createMessage = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
+    if (senderId === receiverId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Cannot message yourself" });
+    }
 
-    //find existing conversation
+    const [senderInOrg, receiverInOrg] = await Promise.all([
+      isUserInOrganization(senderId, organizationId),
+      isUserInOrganization(receiverId, organizationId),
+    ]);
+
+    if (!senderInOrg || !receiverInOrg) {
+      return res.status(403).json({
+        success: false,
+        message: "Both users must belong to this organization",
+      });
+    }
+
+    // find existing conversation in this organization
     let conversation = await prisma.conversation.findFirst({
       where: {
+        organizationId,
         AND: [
           {
             participants: {
@@ -49,6 +84,7 @@ export const createMessage = async (req: Request, res: Response) => {
       const participantIds = Array.from(new Set([senderId, receiverId]));
       conversation = await prisma.conversation.create({
         data: {
+          organizationId,
           participants: {
             create: participantIds.map((id) => ({ userId: id })),
           },
@@ -56,12 +92,12 @@ export const createMessage = async (req: Request, res: Response) => {
       });
     }
 
-
     const message = await prisma.message.create({
       data: {
-        content,
+        content: content.trim(),
         senderId,
         conversationId: conversation.id,
+        organizationId,
       },
       include: {
         sender: {
@@ -90,14 +126,12 @@ export const createMessage = async (req: Request, res: Response) => {
       });
     }
 
-
-
-    // emit to receiver 
-    const io = getIO()
-    io.to(`user: ${receiverId}`).emit('newMessage', {
+    // emit to receiver
+    const io = getIO();
+    io.to(`user:${receiverId}`).emit("newMessage", {
       message,
-      receiver
-    })
+      receiver,
+    });
 
     return res.status(201).json({
       success: true,
@@ -117,27 +151,79 @@ export const createMessage = async (req: Request, res: Response) => {
 export const createGroupMessage = async (req: Request, res: Response) => {
   try {
     const { content } = req.body;
+    const groupId = parseParamInt(req.params.groupId);
+    const organizationId = parseParamInt(req.params.organizationId);
+    const senderId = getAuthUserId(req);
 
-    const groupId = Number(req.params.groupId);
-
-    if (!groupId) {
+    if (!Number.isFinite(groupId) || !Number.isFinite(organizationId)) {
       return res
-        .status(404)
-        .json({ success: false, message: "group not found" });
+        .status(400)
+        .json({ success: false, message: "Invalid group or organization id" });
+    }
+    if (!content || typeof content !== "string" || !content.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Message content is required" });
     }
 
-    const senderId = (req as any).user.userId;
-
-    const group = await prisma.group.findUnique({
-      where: { id: groupId },
+    const group = await prisma.group.findFirst({
+      where: { id: groupId, organizationId },
+      select: { id: true, conversationId: true },
     });
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Group not found in this organization",
+      });
+    }
+    const [orgMember, groupMember] = await Promise.all([
+      prisma.membership.findFirst({
+        where: {
+          userId: senderId,
+          organizationId,
+        },
+        select: { userId: true },
+      }),
+      prisma.groupMember.findFirst({
+        where: {
+          groupId,
+          userId: senderId,
+        },
+        select: { userId: true },
+      }),
+    ]);
+
+    if (!orgMember || !groupMember) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to send messages in this group",
+      });
+    }
+
+    if (!group.conversationId) {
+      return res.status(500).json({
+        success: false,
+        message: "Group conversation is not configured",
+      });
+    }
 
     const message = await prisma.message.create({
       data: {
-        content,
+        content: content.trim(),
         senderId,
         groupId,
-        conversationId: group?.conversationId!,
+        conversationId: group.conversationId,
+        organizationId,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -145,7 +231,6 @@ export const createGroupMessage = async (req: Request, res: Response) => {
     io.to(`group:${groupId}`).emit("newGroupMessage", {
       message,
     });
-
 
     return res.status(201).json({
       success: true,
@@ -162,27 +247,49 @@ export const createGroupMessage = async (req: Request, res: Response) => {
 
 export const createGroup = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
-
-    const organizationId = Number(req.params.organizationId);
+    const userId = getAuthUserId(req);
+    const organizationId = parseParamInt(req.params.organizationId);
 
     const { name } = req.body;
 
-    if (!name) {
+    if (!Number.isFinite(organizationId)) {
       return res
-        .status(404)
-        .json({ success: false, message: "group name is required" });
+        .status(400)
+        .json({ success: false, message: "Organization ID is required" });
+    }
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Group name is required" });
+    }
+
+    const member = await prisma.membership.findFirst({
+      where: {
+        userId,
+        organizationId,
+      },
+      select: { userId: true },
+    });
+
+    if (!member) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized in this organization",
+      });
     }
 
     // 1. create conversation first
     const conversation = await prisma.conversation.create({
-      data: {},
+      data: {
+        organizationId,
+      },
     });
 
     // 2. create group with conversationId
     const group = await prisma.group.create({
       data: {
-        name,
+        name: name.trim(),
         organizationId,
         conversationId: conversation.id,
 
@@ -195,7 +302,6 @@ export const createGroup = async (req: Request, res: Response) => {
       },
     });
 
-    console.log(group)
     return res.status(201).json({
       success: true,
       message: "group created successfully",
@@ -211,10 +317,12 @@ export const createGroup = async (req: Request, res: Response) => {
 
 export const getGroups = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = getAuthUserId(req);
+    const organizationId = parseParamInt(req.params.organizationId);
 
     const groups = await prisma.group.findMany({
       where: {
+        organizationId,
         members: {
           some: {
             userId,
@@ -232,46 +340,91 @@ export const getGroups = async (req: Request, res: Response) => {
       .status(500)
       .json({ success: false, message: "Internal server error" });
   }
-}
+};
 
 //add members in a group by groupId
 export const addMembersInGroup = async (req: Request, res: Response) => {
   try {
-
-
-    const groupId = Number(req.params.groupId)
-
+    const requesterId = getAuthUserId(req);
+    const groupId = parseParamInt(req.params.groupId);
+    const organizationId = parseParamInt(req.params.organizationId);
     const { email } = req.body;
 
-    const user = await prisma.user.findUnique({
-      where: { email }
-    })
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: "user not found" })
+    if (!Number.isFinite(groupId) || !Number.isFinite(organizationId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid group or organization id" });
     }
 
-    if (!groupId) {
-      return res.status(404).json({ success: false, message: "group not found" })
+    if (!email || typeof email !== "string") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Member email is required" });
+    }
+
+    const group = await prisma.group.findFirst({
+      where: { id: groupId, organizationId },
+      select: { id: true },
+    });
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Group not found in this organization",
+      });
+    }
+
+    const requesterMembership = await prisma.groupMember.findFirst({
+      where: { groupId, userId: requesterId },
+      select: { role: true },
+    });
+    if (!requesterMembership || requesterMembership.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only group owner can add members",
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: email.trim() },
+    });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "user not found" });
+    }
+
+    const userOrgMembership = await prisma.membership.findFirst({
+      where: { userId: user.id, organizationId },
+      select: { userId: true },
+    });
+    if (!userOrgMembership) {
+      return res.status(403).json({
+        success: false,
+        message: "User is not a member of this organization",
+      });
     }
 
     const existingMember = await prisma.groupMember.findFirst({
       where: {
         userId: user.id,
-        groupId
-      }
-    })
+        groupId,
+      },
+    });
 
     if (existingMember) {
-      return res.status(400).json({ success: false, message: "user already present in the group" })
+      return res
+        .status(400)
+        .json({ success: false, message: "user already present in the group" });
     }
 
     const member = await prisma.groupMember.create({
       data: {
         userId: user.id,
-        groupId: groupId
-      }
-    })
+        groupId: groupId,
+      },
+    });
 
     const io = getIO();
     io.to(`user:${user.id}`).emit("addedToGroup", {
@@ -279,24 +432,147 @@ export const addMembersInGroup = async (req: Request, res: Response) => {
       message: `You were added to a group`,
     });
 
-
-    return res.status(201).json({ success: true, message: "member added successfully to the group", data: member })
-
-
+    return res.status(201).json({
+      success: true,
+      message: "member added successfully to the group",
+      data: member,
+    });
   } catch (error) {
-    console.error(`error in adding group members ${error}`)
-    return res.status(500).json({ success: false, message: "Internal server error" })
+    console.error(`error in adding group members ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
-}
+};
+
+// remove member from a group by membership (owner only)
+export const removeMemberFromGroup = async (req: Request, res: Response) => {
+  try {
+    const requesterId = getAuthUserId(req);
+    const groupId = parseParamInt(req.params.groupId);
+    const organizationId = parseParamInt(req.params.organizationId);
+    const memberUserId = parseParamInt(req.params.memberUserId);
+
+    if (
+      !Number.isFinite(groupId) ||
+      !Number.isFinite(organizationId) ||
+      !Number.isFinite(memberUserId)
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid group, organization, or member id" });
+    }
+
+    const group = await prisma.group.findFirst({
+      where: { id: groupId, organizationId },
+      select: { id: true },
+    });
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Group not found in this organization",
+      });
+    }
+
+    const requesterMembership = await prisma.groupMember.findFirst({
+      where: { groupId, userId: requesterId },
+      select: { role: true },
+    });
+    if (!requesterMembership || requesterMembership.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only group owner can remove members",
+      });
+    }
+
+    if (memberUserId === requesterId) {
+      return res.status(400).json({
+        success: false,
+        message: "Owner cannot remove themselves from the group",
+      });
+    }
+
+    const memberToRemove = await prisma.groupMember.findFirst({
+      where: {
+        groupId,
+        userId: memberUserId,
+      },
+      select: { userId: true, role: true },
+    });
+
+    if (!memberToRemove) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found in this group",
+      });
+    }
+
+    if (memberToRemove.role === "OWNER") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot remove another owner",
+      });
+    }
+
+    await prisma.groupMember.delete({
+      where: {
+        userId_groupId: {
+          userId: memberUserId,
+          groupId,
+        },
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Member removed from group",
+      data: {
+        groupId,
+        userId: memberUserId,
+      },
+    });
+  } catch (error) {
+    console.error(`error in removing group member ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
 
 //get all members of group
 export const getAllGroupMembers = async (req: Request, res: Response) => {
   try {
+    const requesterId = getAuthUserId(req);
+    const groupId = parseParamInt(req.params.groupId);
+    const organizationId = parseParamInt(req.params.organizationId);
 
-    const groupId = Number(req.params.groupId)
+    if (!Number.isFinite(groupId) || !Number.isFinite(organizationId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid group or organization id" });
+    }
 
-    if (!groupId) {
-      return res.status(404).json({ success: false, message: "group not found" })
+    const group = await prisma.group.findFirst({
+      where: { id: groupId, organizationId },
+      select: { id: true },
+    });
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Group not found in this organization",
+      });
+    }
+
+    const requesterMembership = await prisma.groupMember.findFirst({
+      where: { userId: requesterId, groupId },
+      select: { userId: true },
+    });
+    if (!requesterMembership) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to view group members",
+      });
     }
 
     const members = await prisma.groupMember.findMany({
@@ -306,32 +582,44 @@ export const getAllGroupMembers = async (req: Request, res: Response) => {
           select: {
             id: true,
             name: true,
-            email: true
-          }
-        }
-      }
-    })
+            email: true,
+          },
+        },
+      },
+    });
 
-    const memberCount = members.length
+    const memberCount = members.length;
 
     return res.status(200).json({
-      success: true, message: "members fetched successfully",
+      success: true,
+      message: "members fetched successfully",
       count: memberCount,
-      data: members
-    })
-
+      data: members,
+    });
   } catch (error) {
-    console.error(`error in getting all group members: ${error}`)
-    return res.status(500).json({ success: false, message: "Internal server error" })
+    console.error(`error in getting all group members: ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
-}
+};
 
 export const getUserConversations = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = getAuthUserId(req);
+    const organizationId = parseParamInt(req.params.organizationId);
+
+    const userInOrg = await isUserInOrganization(userId, organizationId);
+    if (!userInOrg) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized in this organization",
+      });
+    }
 
     const conversations = await prisma.conversation.findMany({
       where: {
+        organizationId,
         participants: {
           some: {
             userId,
@@ -346,8 +634,8 @@ export const getUserConversations = async (req: Request, res: Response) => {
                 id: true,
                 name: true,
                 email: true,
-              }
-            }
+              },
+            },
           },
         },
         messages: {
@@ -372,12 +660,38 @@ export const getUserConversations = async (req: Request, res: Response) => {
 
 export const getConversationMessages = async (req: Request, res: Response) => {
   try {
-    const conversationId = Number(req.params.conversationId);
+    const userId = getAuthUserId(req);
+    const conversationId = parseParamInt(req.params.conversationId);
+    const organizationId = parseParamInt(req.params.organizationId);
+
+    if (!Number.isFinite(conversationId) || !Number.isFinite(organizationId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid conversation or organization id",
+      });
+    }
+
+    const conversation = await prisma.conversation.findFirst({
+      where: {
+        id: conversationId,
+        organizationId,
+        participants: { some: { userId } },
+      },
+      select: { id: true },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: "Conversation not found in this organization",
+      });
+    }
 
     const messages = await prisma.message.findMany({
       where: {
         conversationId,
         groupId: null,
+        organizationId,
       },
       include: {
         sender: {
@@ -385,8 +699,8 @@ export const getConversationMessages = async (req: Request, res: Response) => {
             id: true,
             name: true,
             email: true,
-          }
-        }
+          },
+        },
       },
       orderBy: {
         createdAt: "asc",
@@ -405,10 +719,20 @@ export const getConversationMessages = async (req: Request, res: Response) => {
 
 export const getUserGroups = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = getAuthUserId(req);
+    const organizationId = parseParamInt(req.params.organizationId);
+
+    const userInOrg = await isUserInOrganization(userId, organizationId);
+    if (!userInOrg) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized in this organization",
+      });
+    }
 
     const groups = await prisma.group.findMany({
       where: {
+        organizationId,
         members: {
           some: {
             userId,
@@ -436,11 +760,39 @@ export const getUserGroups = async (req: Request, res: Response) => {
 
 export const getGroupMessages = async (req: Request, res: Response) => {
   try {
-    const groupId = Number(req.params.groupId);
+    const userId = getAuthUserId(req);
+    const groupId = parseParamInt(req.params.groupId);
+    const organizationId = parseParamInt(req.params.organizationId);
+
+    if (!Number.isFinite(groupId) || !Number.isFinite(organizationId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid group or organization id",
+      });
+    }
+
+    const group = await prisma.group.findFirst({
+      where: {
+        id: groupId,
+        organizationId,
+        members: {
+          some: { userId },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Group not found in this organization",
+      });
+    }
 
     const messages = await prisma.message.findMany({
       where: {
         groupId,
+        organizationId,
       },
       include: {
         sender: true,

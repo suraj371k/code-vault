@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { api } from "@/lib/api";
 import { Users, X, Plus, Loader2 } from "lucide-react";
 import { useCreateGroup } from "@/hooks/teams/useCreateGroup";
 import { useGetMembers } from "@/hooks/teams/useGetMembers";
@@ -50,20 +51,22 @@ const CreateGroupModal = ({
     useGetMembers(organizationId);
 
   const members = (membersData?.data ?? []).filter(
-    (m) => m.userId !== currentUserId
+    (m) => m.userId !== currentUserId,
   );
 
   const filtered = memberSearch.trim()
     ? members.filter(
         (m) =>
           m.user.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
-          m.user.email.toLowerCase().includes(memberSearch.toLowerCase())
+          m.user.email.toLowerCase().includes(memberSearch.toLowerCase()),
       )
     : members;
 
   const toggleMember = (userId: number) => {
     setSelectedMembers((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId],
     );
   };
 
@@ -76,15 +79,37 @@ const CreateGroupModal = ({
     createGroup(
       { name },
       {
-        onSuccess: () => {
-          toast.success(`Group "${name}" created!`);
+        onSuccess: async (res) => {
+          const groupId = res?.data?.id;
+          // Add each selected member to the newly created group
+          if (groupId && selectedMembers.length > 0) {
+            const membersList = members.filter((m) =>
+              selectedMembers.includes(m.userId),
+            );
+            await Promise.allSettled(
+              membersList.map((m) =>
+                api.post(`/api/messages/groups/org/${organizationId}/${groupId}/member`, {
+                  email: m.user.email,
+                }),
+              ),
+            );
+          }
+          toast.success(
+            selectedMembers.length > 0
+              ? `Group "${name}" created with ${selectedMembers.length} member${selectedMembers.length > 1 ? "s" : ""}!`
+              : `Group "${name}" created!`,
+          );
           onCreated?.();
           onClose();
         },
         onError: (err: any) => {
-          toast.error(err?.response?.data?.message ?? err?.message ?? "Failed to create group");
+          toast.error(
+            err?.response?.data?.message ??
+              err?.message ??
+              "Failed to create group",
+          );
         },
-      }
+      },
     );
   };
 
@@ -103,7 +128,8 @@ const CreateGroupModal = ({
         style={{
           background: "linear-gradient(160deg, #0d1117 0%, #0a0a0f 100%)",
           border: "1px solid rgba(20,184,166,0.2)",
-          boxShadow: "0 0 60px rgba(20,184,166,0.1), 0 24px 48px rgba(0,0,0,0.6)",
+          boxShadow:
+            "0 0 60px rgba(20,184,166,0.1), 0 24px 48px rgba(0,0,0,0.6)",
         }}
       >
         {/* Header */}
@@ -115,7 +141,8 @@ const CreateGroupModal = ({
             <div
               className="size-8 rounded-lg flex items-center justify-center shrink-0"
               style={{
-                background: "linear-gradient(135deg, rgba(20,184,166,0.15), rgba(6,182,212,0.08))",
+                background:
+                  "linear-gradient(135deg, rgba(20,184,166,0.15), rgba(6,182,212,0.08))",
                 border: "1px solid rgba(20,184,166,0.25)",
               }}
             >
@@ -206,7 +233,7 @@ const CreateGroupModal = ({
 
             {/* Member list */}
             <div
-              className="max-h-[180px] overflow-y-auto space-y-0.5 pr-0.5"
+              className="max-h-45 overflow-y-auto space-y-0.5 pr-0.5"
               style={{ scrollbarWidth: "thin" }}
             >
               {loadingMembers &&
@@ -234,7 +261,9 @@ const CreateGroupModal = ({
 
               {!loadingMembers && filtered.length === 0 && (
                 <p className="text-[12px] text-zinc-600 text-center py-4">
-                  {memberSearch ? "No members found" : "No other members in org"}
+                  {memberSearch
+                    ? "No members found"
+                    : "No other members in org"}
                 </p>
               )}
 
@@ -249,7 +278,7 @@ const CreateGroupModal = ({
                         "w-full flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all duration-150 text-left",
                         isSelected
                           ? "border border-teal-500/30"
-                          : "border border-transparent hover:border-teal-900/40"
+                          : "border border-transparent hover:border-teal-900/40",
                       )}
                       style={{
                         background: isSelected
@@ -276,7 +305,7 @@ const CreateGroupModal = ({
                         <p
                           className={cn(
                             "text-[12px] font-semibold truncate",
-                            isSelected ? "text-teal-100" : "text-zinc-300"
+                            isSelected ? "text-teal-100" : "text-zinc-300",
                           )}
                         >
                           {member.user.name}
@@ -289,7 +318,8 @@ const CreateGroupModal = ({
                         <div
                           className="size-4 rounded-full flex items-center justify-center shrink-0"
                           style={{
-                            background: "linear-gradient(135deg, #0f766e, #0d9488)",
+                            background:
+                              "linear-gradient(135deg, #0f766e, #0d9488)",
                           }}
                         >
                           <svg
@@ -333,7 +363,7 @@ const CreateGroupModal = ({
               "flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold text-teal-50 transition-all duration-200",
               !isPending && groupName.trim()
                 ? "hover:scale-105"
-                : "opacity-50 cursor-not-allowed"
+                : "opacity-50 cursor-not-allowed",
             )}
             style={{
               background:

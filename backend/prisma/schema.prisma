@@ -97,12 +97,18 @@ model Organization {
   snippets    Snippet[]
   groups      Group[]
   collections Collection[]
+
+  messages Message[]
+
+  notifications Notification[]
+
+  conversations Conversation[]
 }
 
 model Membership {
   id Int @id @default(autoincrement())
 
-  user   User @relation(fields: [userId], references: [id])
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId Int
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -116,10 +122,10 @@ model Membership {
 model Snippet {
   id Int @id @default(autoincrement())
 
-  author   User @relation(fields: [authorId], references: [id])
+  author   User @relation(fields: [authorId], references: [id], onDelete: Cascade)
   authorId Int
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId Int
 
   title      String
@@ -148,15 +154,18 @@ model Collection {
 model Message {
   id       Int    @id @default(autoincrement())
   content  String
-  sender   User   @relation(fields: [senderId], references: [id])
+  sender   User   @relation(fields: [senderId], references: [id], onDelete: Cascade)
   senderId Int
 
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   conversationId Int
 
-  group     Group?   @relation(fields: [groupId], references: [id])
+  group     Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
   groupId   Int?
   createdAt DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId Int
 
   notifications Notification[]
 }
@@ -164,10 +173,10 @@ model Message {
 model Group {
   id           Int          @id @default(autoincrement())
   name         String
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   conversationId Int?
-  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   organizationId Int
   messages       Message[]
@@ -177,9 +186,9 @@ model Group {
 }
 
 model GroupMember {
-  user     User     @relation(fields: [userId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId   Int
-  group    Group    @relation(fields: [groupId], references: [id])
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   groupId  Int
   role     Role     @default(MEMBER)
   joinedAt DateTime @default(now())
@@ -194,13 +203,16 @@ model Conversation {
   participants ConversationMember[]
   messages     Message[]
   groups       Group[]
+
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model ConversationMember {
   user   User @relation(fields: [userId], references: [id])
   userId Int
 
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   conversationId Int
 
   @@id([userId, conversationId])
@@ -213,10 +225,13 @@ model Notification {
   isRead  Boolean @default(false)
 
   userId Int
-  user   User @relation(fields: [userId], references: [id])
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   snippetId Int?
   snippet   Snippet? @relation(fields: [snippetId], references: [id])
+
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   messageId  Int?
   messageRef Message? @relation(fields: [messageId], references: [id])

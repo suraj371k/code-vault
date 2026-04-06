@@ -151,7 +151,7 @@ export default function CreateOrganizationDialog({
                   >
                     app.acme.com/
                   </span>
-                  {/* ✅ Fixed: now controlled and wired to state */}
+               
                   <input
                     id="org-slug"
                     type="text"
@@ -190,7 +190,7 @@ export default function CreateOrganizationDialog({
                 >
                   Cancel
                 </Button>
-                {/* ✅ type="submit" now works because we're inside a <form> */}
+              
                 <Button
                   type="submit"
                   disabled={isPending}

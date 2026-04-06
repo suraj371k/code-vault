@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import {
   addExistingSnippetToCollection,
@@ -6,6 +6,7 @@ import {
   createCollection,
   createSnippets,
   createSnippetToCollection,
+  deleteCollection,
   deleteSnippet,
   getAllLanguages,
   getCollections,
@@ -18,17 +19,17 @@ import {
 
 const router = Router();
 
-// ── Snippet CRUD ──────────────────────────────────────────
+// ── Snippet CRUD 
 router.post("/:organizationId", authMiddleware, createSnippets);
 router.get("/organization/:organizationId", authMiddleware, getOrganizationSnippet);
 router.get("/:snippetId", authMiddleware, getSnippetById);
 router.delete("/:snippetId", authMiddleware, deleteSnippet);
 router.patch("/:snippetId", authMiddleware, updateSnippets);
 
-// ── Languages ─────────────────────────────────────────────
+// ── Languages 
 router.get("/all/languages", getAllLanguages);
 
-// ── Collections ───────────────────────────────────────────
+// ── Collections 
 // List all collections for an org
 router.get("/collections/:organizationId", authMiddleware, getCollections);
 
@@ -44,7 +45,10 @@ router.get("/collection/:colId", authMiddleware, getCollectionSnippets);
 // Add an EXISTING snippet to an existing collection
 router.patch("/:snippetId/collection/:colId", authMiddleware, addExistingSnippetToCollection);
 
-// ── Favourites ────────────────────────────────────────────
+// Delete a collection
+router.delete("/collection/:colId", authMiddleware, deleteCollection);
+
+// ── Favourites 
 router.patch("/:snippetId/fav", authMiddleware, addToFav);
 router.patch("/:snippetId/unfav", authMiddleware, removeFromFav);
 

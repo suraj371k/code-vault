@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useOrganization } from "@/hooks/organization/useOrganization";
 import { useSnippets } from "@/hooks/snippets/useSnippets";
@@ -8,6 +8,7 @@ import { useGetMembers } from "@/hooks/teams/useGetMembers";
 import { useGetConversations } from "@/hooks/teams/useGetConversations";
 import { useGetUserGroups } from "@/hooks/teams/useGetUserGroups";
 import { useProfile } from "@/hooks/auth/useProfile";
+import { useRemoveMember } from "@/hooks/organization/useRemoveMember";
 import { Snippet } from "@/types/snippets";
 import Link from "next/link";
 import {
@@ -36,7 +37,9 @@ import {
   Sparkles,
   ExternalLink,
   Clock,
+  Trash2,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 /* ══════════════════════════════════════════════
    HELPERS
@@ -312,8 +315,10 @@ export default function Dashboard() {
   });
 
   const { data: membersData, isPending: membersLoading } = useGetMembers(orgId);
-  const { data: conversationsData } = useGetConversations();
-  const { data: groupsData } = useGetUserGroups();
+  const { data: conversationsData } = useGetConversations(orgId);
+  const { data: groupsData } = useGetUserGroups(orgId);
+  const { mutate: removeMember, isPending: removingMember } = useRemoveMember();
+  const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
 
   const snippets = snippetData?.data ?? [];
   const allSnippets = allSnippetData?.data ?? [];
@@ -321,6 +326,8 @@ export default function Dashboard() {
   const members = membersData?.data ?? [];
   const conversations = conversationsData?.data ?? [];
   const groups = groupsData?.data ?? [];
+  const myMemberRecord = members.find((m) => m.userId === Number(profile?.id));
+  const canManageMembers = myMemberRecord?.role === "OWNER";
 
   /* derived chart data */
   const activityData = useMemo(() => buildActivityData(allSnippets, 14), [allSnippets]);
@@ -346,6 +353,30 @@ export default function Dashboard() {
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = profile?.name?.split(" ")[0] ?? "there";
+
+  const handleRemoveMember = (memberId: number, memberName: string) => {
+    if (!orgId) return;
+
+    const ok = window.confirm(`Remove ${memberName} from this organization?`);
+    if (!ok) return;
+
+    setRemovingMemberId(memberId);
+    removeMember(
+      { organizationId: Number(orgId), memberId },
+      {
+        onSuccess: () => {
+          toast.success(`${memberName} removed from organization`);
+          setRemovingMemberId(null);
+        },
+        onError: (err: any) => {
+          toast.error(
+            err?.response?.data?.message ?? err?.message ?? "Failed to remove member",
+          );
+          setRemovingMemberId(null);
+        },
+      },
+    );
+  };
 
   return (
     <div
@@ -682,7 +713,17 @@ export default function Dashboard() {
       {/* ── Team members strip ── */}
       {!isLoading && (
         <ChartCard>
-          <SectionHeading icon={Users} title="Team Members" />
+          <SectionHeading
+            icon={Users}
+            title="Team Members"
+            action={
+              canManageMembers ? (
+                <span className="text-[10px] text-zinc-600 uppercase tracking-widest">
+                  Owner Controls
+                </span>
+              ) : undefined
+            }
+          />
           {members.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 gap-3">
               <div
@@ -725,6 +766,23 @@ export default function Dashboard() {
                     <p className="text-[12px] font-semibold text-zinc-300 leading-none">{m.user.name}</p>
                     <p className="text-[10px] text-zinc-600 mt-0.5">{m.role}</p>
                   </div>
+                  {canManageMembers &&
+                    m.role !== "OWNER" &&
+                    m.userId !== Number(profile?.id) && (
+                      <button
+                        onClick={() => handleRemoveMember(m.id, m.user.name)}
+                        disabled={removingMember && removingMemberId === m.id}
+                        className="ml-2 inline-flex items-center justify-center size-8 rounded-lg border transition-all duration-150 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: "rgba(239,68,68,0.08)",
+                          borderColor: "rgba(239,68,68,0.25)",
+                          color: "#f87171",
+                        }}
+                        title={`Remove ${m.user.name}`}
+                      >
+                        <Trash2 className="size-3.5" strokeWidth={2} />
+                      </button>
+                    )}
                 </div>
               ))}
             </div>

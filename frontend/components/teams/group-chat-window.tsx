@@ -5,10 +5,13 @@ import { useGetGroupMessages } from '@/hooks/teams/useGetGroupMessages'
 import { useSendGroupMessage } from '@/hooks/teams/useSendGroupMessage'
 import { Message } from '@/types/conversations'
 import { Avatar, AvatarFallback } from '../ui/avatar'
-import { Send, Loader2, MessageCircleDashed, ArrowDown, Users } from 'lucide-react'
+import { Send, Loader2, MessageCircleDashed, ArrowDown, Users, UserPlus2, Trash2, Shield, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import { socket } from '@/lib/socket'
+import { useGetGroupMembers } from '@/hooks/teams/useGetGroupMembers'
+import { useAddGroupMember } from '@/hooks/teams/useAddGroupMember'
+import { useRemoveGroupMember } from '@/hooks/teams/useRemoveGroupMember'
 
 /* ─── helpers ─── */
 
@@ -116,7 +119,7 @@ function MessageBubble({ message, isMine, showAvatar, isConsecutive }: BubblePro
 
         <div
           className={cn(
-            'relative px-3.5 py-2.5 text-[13px] leading-relaxed break-words',
+            'relative px-3.5 py-2.5 text-[13px] leading-relaxed wrap-break-word',
             isMine
               ? 'rounded-t-2xl rounded-bl-2xl rounded-br-md text-zinc-100'
               : 'rounded-t-2xl rounded-br-2xl rounded-bl-md text-zinc-200'
@@ -151,18 +154,32 @@ function MessageBubble({ message, isMine, showAvatar, isConsecutive }: BubblePro
 interface GroupChatWindowProps {
   group: { id: number; name: string }
   currentUserId?: number
+  organizationId?: number
 }
 
-const GroupChatWindow = ({ group, currentUserId }: GroupChatWindowProps) => {
-  const { data, isPending } = useGetGroupMessages(group.id)
+const GroupChatWindow = ({ group, currentUserId, organizationId }: GroupChatWindowProps) => {
+  const { data, isPending } = useGetGroupMessages(group.id, organizationId)
   const { mutate: sendMessage, isPending: sending } = useSendGroupMessage()
+  const { data: groupMembersData } = useGetGroupMembers(group.id, organizationId)
+  const { mutate: addGroupMember, isPending: addingMember } = useAddGroupMember(
+    group.id,
+    organizationId ?? 0,
+  )
+  const { mutate: removeGroupMember, isPending: removingMember } =
+    useRemoveGroupMember()
 
   const [text, setText] = useState('')
   const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const [manageOpen, setManageOpen] = useState(false)
+  const [memberEmail, setMemberEmail] = useState('')
+  const [removingUserId, setRemovingUserId] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [localMessages, setLocalMessages] = useState<Message[]>([])
+  const groupMembers = groupMembersData?.data ?? []
+  const myMembership = groupMembers.find((m) => m.userId === currentUserId)
+  const isGroupOwner = myMembership?.role === 'OWNER'
 
   /* Sync server messages into local state */
   useEffect(() => {
@@ -184,8 +201,8 @@ const GroupChatWindow = ({ group, currentUserId }: GroupChatWindowProps) => {
   useEffect(() => {
     if (!currentUserId) return
 
-    socket.connect()
-    socket.emit('join', currentUserId)
+    // connection managed by chat-list; just join the group room
+    socket.emit('joinGroup', group.id)
 
     // Handle group-specific socket event
     const handleGroupMessage = ({ message }: { message: Message }) => {
@@ -213,7 +230,6 @@ const GroupChatWindow = ({ group, currentUserId }: GroupChatWindowProps) => {
     return () => {
       socket.off('newGroupMessage', handleGroupMessage)
       socket.off('newMessage', handleNewMessage)
-      socket.disconnect()
     }
   }, [currentUserId, group.id])
 
@@ -232,10 +248,10 @@ const GroupChatWindow = ({ group, currentUserId }: GroupChatWindowProps) => {
   /* Send */
   const handleSend = () => {
     const content = text.trim()
-    if (!content) return
+    if (!content || !organizationId) return
 
     sendMessage(
-      { groupId: group.id, content },
+      { groupId: group.id, content, organizationId },
       {
         onSuccess: (res) => {
           setText('')
@@ -272,6 +288,47 @@ const GroupChatWindow = ({ group, currentUserId }: GroupChatWindowProps) => {
     el.style.height = Math.min(el.scrollHeight, 120) + 'px'
   }
 
+  const handleAddMember = () => {
+    const email = memberEmail.trim()
+    if (!organizationId || !email) return
+    addGroupMember(
+      { email },
+      {
+        onSuccess: () => {
+          toast.success('Member added to group')
+          setMemberEmail('')
+        },
+        onError: (err: any) => {
+          toast.error(err?.response?.data?.message ?? err?.message ?? 'Failed to add member')
+        },
+      },
+    )
+  }
+
+  const handleRemoveMember = (memberUserId: number, memberName: string) => {
+    if (!organizationId) return
+    const ok = window.confirm(`Remove ${memberName} from ${group.name}?`)
+    if (!ok) return
+    setRemovingUserId(memberUserId)
+    removeGroupMember(
+      {
+        organizationId,
+        groupId: group.id,
+        memberUserId,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`${memberName} removed`)
+          setRemovingUserId(null)
+        },
+        onError: (err: any) => {
+          toast.error(err?.response?.data?.message ?? err?.message ?? 'Failed to remove member')
+          setRemovingUserId(null)
+        },
+      },
+    )
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
@@ -294,7 +351,117 @@ const GroupChatWindow = ({ group, currentUserId }: GroupChatWindowProps) => {
           <p className="text-[13px] font-semibold text-zinc-100 leading-none">{group.name}</p>
           <p className="text-[11px] text-teal-500/70 mt-0.5 leading-none">Group</p>
         </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span
+            className="text-[10px] px-2 py-1 rounded-md border"
+            style={{
+              background: 'rgba(20,184,166,0.08)',
+              borderColor: 'rgba(20,184,166,0.2)',
+              color: '#67e8f9',
+            }}
+          >
+            {groupMembers.length} members
+          </span>
+          {isGroupOwner && (
+            <button
+              onClick={() => setManageOpen((v) => !v)}
+              className="h-8 px-2.5 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1.5"
+              style={{
+                background: manageOpen ? 'rgba(20,184,166,0.15)' : 'rgba(20,184,166,0.08)',
+                borderColor: 'rgba(20,184,166,0.25)',
+                color: '#5eead4',
+              }}
+            >
+              {manageOpen ? <X className="size-3.5" /> : <UserPlus2 className="size-3.5" />}
+              Manage
+            </button>
+          )}
+        </div>
       </div>
+
+      {isGroupOwner && manageOpen && (
+        <div className="px-4 py-3 border-b border-teal-950/50 space-y-3" style={{ background: 'rgba(10,10,15,0.86)' }}>
+          <div className="flex items-center gap-2 text-[11px] text-teal-300">
+            <Shield className="size-3.5" />
+            Owner controls: add or remove group members
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              value={memberEmail}
+              onChange={(e) => setMemberEmail(e.target.value)}
+              placeholder="member@email.com"
+              className="flex-1 h-9 px-3 rounded-lg text-[12px] text-zinc-200 bg-transparent border outline-none"
+              style={{ borderColor: 'rgba(20,184,166,0.2)' }}
+            />
+            <button
+              onClick={handleAddMember}
+              disabled={!memberEmail.trim() || addingMember}
+              className="h-9 px-3 rounded-lg text-[12px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #0f766e, #0d9488)', color: '#ecfeff' }}
+            >
+              {addingMember ? <Loader2 className="size-3.5 animate-spin" /> : <UserPlus2 className="size-3.5" />}
+              Add Member
+            </button>
+          </div>
+
+          <div className="grid gap-1.5">
+            {groupMembers.map((m) => {
+              const isOwner = m.role === 'OWNER'
+              const canRemove = !isOwner && m.userId !== currentUserId
+              const busy = removingMember && removingUserId === m.userId
+              return (
+                <div
+                  key={m.userId}
+                  className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border"
+                  style={{
+                    background: 'rgba(255,255,255,0.02)',
+                    borderColor: 'rgba(255,255,255,0.07)',
+                  }}
+                >
+                  <Avatar className="size-7">
+                    <AvatarFallback
+                      className="text-[10px] font-bold text-teal-100"
+                      style={{ background: avatarGradient(m.userId) }}
+                    >
+                      {getInitials(m.user.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] text-zinc-200 truncate">{m.user.name}</p>
+                    <p className="text-[10px] text-zinc-600 truncate">{m.user.email}</p>
+                  </div>
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded border"
+                    style={{
+                      borderColor: isOwner ? 'rgba(20,184,166,0.25)' : 'rgba(255,255,255,0.15)',
+                      color: isOwner ? '#5eead4' : '#a1a1aa',
+                      background: isOwner ? 'rgba(20,184,166,0.08)' : 'rgba(255,255,255,0.04)',
+                    }}
+                  >
+                    {m.role}
+                  </span>
+                  {canRemove && (
+                    <button
+                      onClick={() => handleRemoveMember(m.userId, m.user.name)}
+                      disabled={busy}
+                      className="size-7 rounded-md border inline-flex items-center justify-center disabled:opacity-50"
+                      style={{
+                        borderColor: 'rgba(239,68,68,0.25)',
+                        background: 'rgba(239,68,68,0.08)',
+                        color: '#f87171',
+                      }}
+                      title={`Remove ${m.user.name}`}
+                    >
+                      {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Messages area ── */}
       <div

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { messageQueryKeys } from "./keys";
 
 export interface TeamMember {
+  id: number;
   userId: number;
   role: string;
   user: {

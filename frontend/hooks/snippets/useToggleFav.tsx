@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { api } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -21,6 +21,7 @@ export const useToggleFav = () => {
     onSuccess: (_, { snippetId, isFav, organizationId }) => {
       queryClient.invalidateQueries({ queryKey: ["snippet-detail", snippetId] });
       queryClient.invalidateQueries({ queryKey: ["get-snippets", organizationId] });
+      queryClient.invalidateQueries({ queryKey: ["fav-snippets", organizationId] });
       toast.success(isFav ? "Removed from favourites" : "Added to favourites ❤️");
     },
     onError: () => toast.error("Failed to update favourites"),
