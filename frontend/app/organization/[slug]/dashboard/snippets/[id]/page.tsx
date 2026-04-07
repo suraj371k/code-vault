@@ -104,7 +104,6 @@ const SnippetDetails = () => {
       <SnippetBackground />
 
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
-
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 mb-8 text-xs text-zinc-600">
           <Link
@@ -115,7 +114,7 @@ const SnippetDetails = () => {
             Snippets
           </Link>
           <span className="text-zinc-800">/</span>
-          <span className="text-zinc-500 truncate max-w-[200px]">{data.title}</span>
+          <span className="text-zinc-500 truncate max-w-50">{data.title}</span>
         </nav>
 
         {/* Title block */}
@@ -153,7 +152,9 @@ const SnippetDetails = () => {
             <div className="w-6 h-6 rounded-full bg-teal-950 border border-teal-800/50 flex items-center justify-center text-[10px] font-bold text-teal-400 uppercase">
               {data.author?.name?.[0] ?? "?"}
             </div>
-            <span className="text-zinc-400 text-xs">{data.author?.name ?? "Unknown"}</span>
+            <span className="text-zinc-400 text-xs">
+              {data.author?.name ?? "Unknown"}
+            </span>
           </div>
           <span className="text-zinc-800 text-xs">·</span>
           <span className="text-zinc-600 text-xs">{createdDate}</span>
@@ -162,7 +163,9 @@ const SnippetDetails = () => {
         {/* Collections this snippet belongs to — pill row */}
         {currentCollectionIds.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 mb-6">
-            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">In:</span>
+            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">
+              In:
+            </span>
             {(data.collections ?? []).map((col) => (
               <span
                 key={col.id}
@@ -224,9 +227,15 @@ const SnippetDetails = () => {
               style={{ boxShadow: "0 0 18px rgba(45,212,191,.4)" }}
             >
               {copied ? (
-                <><Check className="w-3.5 h-3.5" />Copied!</>
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  Copied!
+                </>
               ) : (
-                <><Copy className="w-3.5 h-3.5" />Copy Code</>
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  Copy Code
+                </>
               )}
             </Button>
           )}
@@ -235,7 +244,7 @@ const SnippetDetails = () => {
           {organizationId && (
             <CollectionPanel
               snippetId={snippetId}
-              organizationId={organizationId}
+              organizationId={Number(organizationId)}
               isFav={data.isFav}
               currentCollectionIds={currentCollectionIds}
             />
@@ -244,7 +253,11 @@ const SnippetDetails = () => {
           {/* AI Chat */}
           <ChatSheet
             snippetId={snippetId}
-            snippet={{ title: data.title, code: data.code, language: data.language }}
+            snippet={{
+              title: data.title,
+              code: data.code,
+              language: data.language,
+            }}
           />
 
           {/* Delete */}

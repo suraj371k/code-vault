@@ -106,8 +106,16 @@ const LANG_COLORS: Record<string, string> = {
   Dockerfile: "#38bdf8",
 };
 const PIE_FALLBACK = [
-  "#2dd4bf","#60a5fa","#facc15","#f87171","#a78bfa",
-  "#4ade80","#fb923c","#22d3ee","#e879f9","#818cf8",
+  "#2dd4bf",
+  "#60a5fa",
+  "#facc15",
+  "#f87171",
+  "#a78bfa",
+  "#4ade80",
+  "#fb923c",
+  "#22d3ee",
+  "#e879f9",
+  "#818cf8",
 ];
 
 /* ── build last-N-days activity from snippet created_at ── */
@@ -124,7 +132,10 @@ function buildActivityData(snippets: Snippet[], days = 14) {
     if (key in counts) counts[key]++;
   }
   return Object.entries(counts).map(([date, count]) => ({
-    date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    date: new Date(date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
     snippets: count,
   }));
 }
@@ -187,7 +198,9 @@ function StatCard({
       {/* glow blob */}
       <div
         className="absolute -top-6 -right-6 size-24 rounded-full pointer-events-none opacity-30 group-hover:opacity-50 transition-opacity"
-        style={{ background: `radial-gradient(circle, ${accent}55 0%, transparent 70%)` }}
+        style={{
+          background: `radial-gradient(circle, ${accent}55 0%, transparent 70%)`,
+        }}
       />
 
       <div className="flex items-start justify-between mb-4">
@@ -195,7 +208,11 @@ function StatCard({
           className="flex items-center justify-center size-10 rounded-xl"
           style={{ background: `${accent}18`, border: `1px solid ${accent}30` }}
         >
-          <Icon className="size-5" style={{ color: accent }} strokeWidth={1.8} />
+          <Icon
+            className="size-5"
+            style={{ color: accent }}
+            strokeWidth={1.8}
+          />
         </div>
         {href && (
           <ArrowUpRight
@@ -206,7 +223,9 @@ function StatCard({
       </div>
 
       <div>
-        <p className="text-[28px] font-bold text-white leading-none tabular-nums">{value}</p>
+        <p className="text-[28px] font-bold text-white leading-none tabular-nums">
+          {value}
+        </p>
         <p className="text-[12px] font-medium text-zinc-500 mt-1">{label}</p>
         {sub && <p className="text-[11px] text-zinc-700 mt-0.5">{sub}</p>}
       </div>
@@ -230,7 +249,9 @@ function SectionHeading({
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
         <Icon className="size-4 text-teal-500" strokeWidth={2} />
-        <h2 className="text-[13px] font-bold text-zinc-200 tracking-wide">{title}</h2>
+        <h2 className="text-[13px] font-bold text-zinc-200 tracking-wide">
+          {title}
+        </h2>
       </div>
       {action}
     </div>
@@ -298,18 +319,17 @@ export default function Dashboard() {
 
   const { data: profile } = useProfile();
   const { data: org, isPending: orgLoading } = useOrganization(slug as string);
-  const orgId = org?.id;
+  const orgId = org?.id ? Number(org.id) : undefined;
 
-  /* fetch ALL snippets (large limit) for chart computation */
   const { data: snippetData, isPending: snippetsLoading } = useSnippets({
-    organizationId: orgId ?? 0,
+    organizationId: Number(orgId) ?? 0,
     page: 1,
     search: "",
   });
 
   /* fetch up to 100 for full chart data */
   const { data: allSnippetData } = useSnippets({
-    organizationId: orgId ?? 0,
+    organizationId: Number(orgId) ?? 0,
     page: 1,
     search: "",
   });
@@ -330,7 +350,10 @@ export default function Dashboard() {
   const canManageMembers = myMemberRecord?.role === "OWNER";
 
   /* derived chart data */
-  const activityData = useMemo(() => buildActivityData(allSnippets, 14), [allSnippets]);
+  const activityData = useMemo(
+    () => buildActivityData(allSnippets, 14),
+    [allSnippets],
+  );
   const langData = useMemo(() => buildLangData(allSnippets), [allSnippets]);
   const authorData = useMemo(() => buildAuthorData(allSnippets), [allSnippets]);
 
@@ -338,15 +361,19 @@ export default function Dashboard() {
   const recentSnippets = useMemo(
     () =>
       [...snippets]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        )
         .slice(0, 5),
-    [snippets]
+    [snippets],
   );
 
   /* most used language */
   const topLang = langData[0]?.name ?? "—";
 
-  const isLoading = orgLoading || snippetsLoading || (!!orgId && membersLoading);
+  const isLoading =
+    orgLoading || snippetsLoading || (!!orgId && membersLoading);
 
   /* greeting */
   const hour = new Date().getHours();
@@ -370,7 +397,9 @@ export default function Dashboard() {
         },
         onError: (err: any) => {
           toast.error(
-            err?.response?.data?.message ?? err?.message ?? "Failed to remove member",
+            err?.response?.data?.message ??
+              err?.message ??
+              "Failed to remove member",
           );
           setRemovingMemberId(null);
         },
@@ -482,7 +511,6 @@ export default function Dashboard() {
 
       {/* ── Charts row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
         {/* Activity area chart — 2/3 width */}
         <ChartCard className="lg:col-span-2">
           <SectionHeading
@@ -498,14 +526,21 @@ export default function Dashboard() {
             <Skel className="h-52 w-full" />
           ) : (
             <ResponsiveContainer width="100%" height={210}>
-              <AreaChart data={activityData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+              <AreaChart
+                data={activityData}
+                margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
+              >
                 <defs>
                   <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#2dd4bf" stopOpacity={0.25} />
                     <stop offset="95%" stopColor="#2dd4bf" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(255,255,255,0.04)"
+                  vertical={false}
+                />
                 <XAxis
                   dataKey="date"
                   tick={{ fill: "#52525b", fontSize: 10 }}
@@ -519,7 +554,10 @@ export default function Dashboard() {
                   tickLine={false}
                   axisLine={false}
                 />
-                <Tooltip content={<CustomTooltip />} cursor={{ stroke: "rgba(45,212,191,0.15)", strokeWidth: 1 }} />
+                <Tooltip
+                  content={<CustomTooltip />}
+                  cursor={{ stroke: "rgba(45,212,191,0.15)", strokeWidth: 1 }}
+                />
                 <Area
                   type="monotone"
                   dataKey="snippets"
@@ -527,7 +565,12 @@ export default function Dashboard() {
                   strokeWidth={2}
                   fill="url(#areaGrad)"
                   dot={false}
-                  activeDot={{ r: 4, fill: "#2dd4bf", stroke: "#0a0a0f", strokeWidth: 2 }}
+                  activeDot={{
+                    r: 4,
+                    fill: "#2dd4bf",
+                    stroke: "#0a0a0f",
+                    strokeWidth: 2,
+                  }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -540,7 +583,9 @@ export default function Dashboard() {
           {isLoading ? (
             <Skel className="h-52 w-full" />
           ) : langData.length === 0 ? (
-            <div className="flex items-center justify-center h-52 text-zinc-700 text-[12px]">No data yet</div>
+            <div className="flex items-center justify-center h-52 text-zinc-700 text-[12px]">
+              No data yet
+            </div>
           ) : (
             <div className="flex flex-col items-center gap-4">
               <ResponsiveContainer width="100%" height={160}>
@@ -558,7 +603,10 @@ export default function Dashboard() {
                     {langData.map((entry, i) => (
                       <Cell
                         key={entry.name}
-                        fill={LANG_COLORS[entry.name] ?? PIE_FALLBACK[i % PIE_FALLBACK.length]}
+                        fill={
+                          LANG_COLORS[entry.name] ??
+                          PIE_FALLBACK[i % PIE_FALLBACK.length]
+                        }
                       />
                     ))}
                   </Pie>
@@ -583,18 +631,26 @@ export default function Dashboard() {
               {/* Legend */}
               <div className="flex flex-col gap-1.5 w-full">
                 {langData.slice(0, 5).map((entry, i) => (
-                  <div key={entry.name} className="flex items-center justify-between">
+                  <div
+                    key={entry.name}
+                    className="flex items-center justify-between"
+                  >
                     <div className="flex items-center gap-2">
                       <span
                         className="size-2 rounded-full shrink-0"
                         style={{
                           background:
-                            LANG_COLORS[entry.name] ?? PIE_FALLBACK[i % PIE_FALLBACK.length],
+                            LANG_COLORS[entry.name] ??
+                            PIE_FALLBACK[i % PIE_FALLBACK.length],
                         }}
                       />
-                      <span className="text-[11px] text-zinc-400">{entry.name}</span>
+                      <span className="text-[11px] text-zinc-400">
+                        {entry.name}
+                      </span>
                     </div>
-                    <span className="text-[11px] text-zinc-600 tabular-nums">{entry.value}</span>
+                    <span className="text-[11px] text-zinc-600 tabular-nums">
+                      {entry.value}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -605,18 +661,27 @@ export default function Dashboard() {
 
       {/* ── Bar chart + Recent snippets row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
         {/* Snippets per member bar */}
         <ChartCard>
           <SectionHeading icon={TrendingUp} title="Top Contributors" />
           {isLoading ? (
             <Skel className="h-48 w-full" />
           ) : authorData.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-zinc-700 text-[12px]">No data yet</div>
+            <div className="flex items-center justify-center h-48 text-zinc-700 text-[12px]">
+              No data yet
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height={195}>
-              <BarChart data={authorData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal vertical={false} />
+              <BarChart
+                data={authorData}
+                margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(255,255,255,0.04)"
+                  horizontal
+                  vertical={false}
+                />
                 <XAxis
                   dataKey="name"
                   tick={{ fill: "#52525b", fontSize: 10 }}
@@ -629,7 +694,10 @@ export default function Dashboard() {
                   tickLine={false}
                   axisLine={false}
                 />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(20,184,166,0.05)" }} />
+                <Tooltip
+                  content={<CustomTooltip />}
+                  cursor={{ fill: "rgba(20,184,166,0.05)" }}
+                />
                 <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                   {authorData.map((_, i) => (
                     <Cell
@@ -670,7 +738,10 @@ export default function Dashboard() {
               <p className="text-zinc-700 text-[12px]">No snippets yet</p>
             </div>
           ) : (
-            <div className="flex flex-col divide-y" style={{ borderColor: "rgba(20,184,166,0.08)" }}>
+            <div
+              className="flex flex-col divide-y"
+              style={{ borderColor: "rgba(20,184,166,0.08)" }}
+            >
               {recentSnippets.map((s) => (
                 <Link
                   key={s.id}
@@ -729,14 +800,17 @@ export default function Dashboard() {
               <div
                 className="size-10 rounded-xl flex items-center justify-center"
                 style={{
-                  background: "linear-gradient(135deg, rgba(96,165,250,0.08), rgba(59,130,246,0.04))",
+                  background:
+                    "linear-gradient(135deg, rgba(96,165,250,0.08), rgba(59,130,246,0.04))",
                   border: "1px solid rgba(96,165,250,0.15)",
                 }}
               >
                 <Users className="size-5 text-blue-500/60" strokeWidth={1.6} />
               </div>
               <div className="text-center">
-                <p className="text-[12px] font-semibold text-zinc-400">No members yet</p>
+                <p className="text-[12px] font-semibold text-zinc-400">
+                  No members yet
+                </p>
                 <p className="text-[11px] text-zinc-600 mt-0.5">
                   Invite people to your organization to collaborate
                 </p>
@@ -763,7 +837,9 @@ export default function Dashboard() {
                     {m.user.name[0].toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-[12px] font-semibold text-zinc-300 leading-none">{m.user.name}</p>
+                    <p className="text-[12px] font-semibold text-zinc-300 leading-none">
+                      {m.user.name}
+                    </p>
                     <p className="text-[10px] text-zinc-600 mt-0.5">{m.role}</p>
                   </div>
                   {canManageMembers &&
