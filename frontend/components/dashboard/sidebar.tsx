@@ -83,10 +83,7 @@ const DashboardSidebar = () => {
   const currentSlug = Array.isArray(slug) ? slug[0] : slug;
   const activeOrganization = data?.find((org) => org.slug === currentSlug);
 
-  // Derive active item from the current URL — works on refresh, back/forward, direct navigation
   const activeId = (() => {
-    // Sort by descending path length so more specific paths match first
-    // e.g. /dashboard/snippets matches before /dashboard
     const sorted = [...items].sort((a, b) => b.path.length - a.path.length);
     const match = sorted.find((item) =>
       pathname.includes(item.path.replace("/dashboard", "dashboard")),

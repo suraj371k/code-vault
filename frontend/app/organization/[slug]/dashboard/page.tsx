@@ -166,9 +166,9 @@ function buildAuthorData(snippets: Snippet[]) {
     .map(([name, count]) => ({ name: name.split(" ")[0], count }));
 }
 
-/* ══════════════════════════════════════════════
+/* 
    SUB-COMPONENTS
-══════════════════════════════════════════════ */
+ */
 
 /* Stat card */
 function StatCard({
@@ -309,9 +309,9 @@ function Skel({ className = "" }: { className?: string }) {
   );
 }
 
-/* ══════════════════════════════════════════════
+/* 
    MAIN DASHBOARD
-══════════════════════════════════════════════ */
+ */
 
 export default function Dashboard() {
   const { slug } = useParams();
