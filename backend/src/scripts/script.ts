@@ -26,9 +26,9 @@ async function main() {
     data: {
       title: "Hello World",
       code: "console.log('Hello World')",
-      summary: ["Basic JS example"],  // ✅ String[]
+      summary: ["Basic JS example"], // ✅ String[]
       authorId: user.id,
-      organizationId: org.id,         // ✅ required, was missing
+      organizationId: org.id, // ✅ required, was missing
       // created_at is auto-set by @default(now()), no need to pass
     },
   });
@@ -46,7 +46,7 @@ async function main() {
 }
 
 main()
-  .catch(e => console.error(e))
+  .catch((e) => console.error(e))
   .finally(async () => {
     await prisma.$disconnect();
   });

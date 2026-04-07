@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { getIO } from "../lib/socket.js";
 
-const parseParamInt = (value: string | undefined) => Number(value);
+const parseParamInt = (value: string | string[] | undefined) =>
+  Number(Array.isArray(value) ? value[0] : value);
 
 const getAuthUserId = (req: Request) => Number((req as any).user?.userId);
 
@@ -460,7 +461,10 @@ export const removeMemberFromGroup = async (req: Request, res: Response) => {
     ) {
       return res
         .status(400)
-        .json({ success: false, message: "Invalid group, organization, or member id" });
+        .json({
+          success: false,
+          message: "Invalid group, organization, or member id",
+        });
     }
 
     const group = await prisma.group.findFirst({
