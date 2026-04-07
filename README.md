@@ -64,6 +64,8 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 
 ---
 
+
+
 ## 🤖 AI Summarization Flow
 
 1. User submits a code snippet
@@ -73,6 +75,10 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 5. Summary is saved in database along with snippet
 
 ---
+## Personalize chat-bot for each snippet
+1. User can ask question about specific snippet
+2. integrated gemini with langchain.
+3. streaming support
 
 
 ## Real Time Chat Feature
@@ -81,5 +87,7 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 2. Chat with organization members
 3. Can create group
 4. group is visible only to only member of the group
+
+## Notification Feature
 
 ### Work in progress.....
