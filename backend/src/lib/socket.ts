@@ -1,4 +1,4 @@
-import { Server } from "socket.io";
+﻿import { Server } from "socket.io";
 import { Server as HttpServer } from "http";
 
 let io: Server;
@@ -14,7 +14,7 @@ export const initSocket = (httpServer: HttpServer) => {
     io.on('connection', (socket) => {
         console.log(`user connected ${socket.id}`)
 
-        // each user join there own room
+        // each user joins their own room
         socket.on('join', (userId: number) => {
             socket.join(`user:${userId}`)
             console.log(`user: ${userId} joined their room`)
@@ -22,14 +22,13 @@ export const initSocket = (httpServer: HttpServer) => {
 
         // join a group room
         socket.on('joinGroup', (groupId: number) => {
-            socket.join(`groip: ${groupId}`)
+            socket.join(`group:${groupId}`)
             console.log(`joined group room: ${groupId}`)
         })
 
         socket.on("disconnect", () => {
             console.log(`User disconnected: ${socket.id}`);
         });
-        return io;
     })
 }
 

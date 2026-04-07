@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { api } from "@/lib/api";
 import { CreateGroupInput, CreateGroupResponse } from "@/types/conversations";
@@ -11,13 +11,17 @@ export const useCreateGroup = (organizationId: number) => {
   return useMutation<CreateGroupResponse, Error, CreateGroupInput>({
     mutationKey: messageMutationKeys.createGroup,
     mutationFn: async (data) => {
-      const res = await api.post(`/api/messages/groups/${organizationId}`, data);
+      const res = await api.post(
+        `/api/messages/groups/org/${organizationId}`,
+        data,
+      );
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: messageQueryKeys.myGroups() });
+      queryClient.invalidateQueries({
+        queryKey: [...messageQueryKeys.myGroups(), organizationId],
+      });
       queryClient.invalidateQueries({ queryKey: messageQueryKeys.groupsAll() });
     },
   });
 };
-

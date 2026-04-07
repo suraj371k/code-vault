@@ -21,7 +21,7 @@ export default function InviteMembersDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  organizationId: number;
+  organizationId: any;
 }) {
   const [email, setEmail] = useState("");
 
@@ -160,7 +160,7 @@ export default function InviteMembersDialog({
                 type="submit"
                 disabled={isPending || !email}
                 onClick={handleSubmit}
-                className="h-9 px-4 text-[13px] font-semibold rounded-lg border-0 transition-all hover:opacity-90 active:scale-[0.98] bg-teal-600 text-[#6a6a6a]"
+                 className="h-9 px-4 text-[13px] font-semibold rounded-lg border-0 transition-all hover:opacity-90 active:scale-[0.98] bg-teal-600 text-white disabled:opacity-50"
               >
                 Send invite
               </Button>

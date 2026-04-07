@@ -32,7 +32,11 @@ router.get("/:slug", authMiddleware, getOrganizationBySlug);
 // delete organization
 router.delete("/:organizationId", authMiddleware, deleteOrganization);
 
-//remove member
-router.delete('/:removerId/remove' , authMiddleware , removeMember)
+// remove member from organization (owner only)
+router.delete(
+  "/:organizationId/member/:memberId",
+  authMiddleware,
+  removeMember,
+);
 
 export default router;

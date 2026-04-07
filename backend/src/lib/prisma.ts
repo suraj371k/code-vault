@@ -7,4 +7,8 @@ const connectionString = `${process.env.DATABASE_URL}`
 const adapter = new PrismaPg({ connectionString })
 const prisma = new PrismaClient({ adapter })
 
+prisma.$connect().catch((error) => {
+  console.error("Prisma initial connect failed:", error);
+});
+
 export { prisma }

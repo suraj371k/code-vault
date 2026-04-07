@@ -84,7 +84,24 @@ export const createOrganization = async (req: Request, res: Response) => {
 export const addMembers = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
+    const userId = (req as any).user.userId;
     const organizationId = Number(req.params.organizationId);
+    const requesterId = Number((req as any).user.userId);
+
+    const ownerMembership = await prisma.membership.findFirst({
+      where: {
+        organizationId,
+        userId: requesterId,
+        role: "OWNER",
+      },
+    });
+
+    if (!ownerMembership) {
+      return res.status(403).json({
+        success: false,
+        message: "Only organization owners can invite members",
+      });
+    }
 
     const user = await prisma.user.findUnique({
       where: { email },
@@ -118,6 +135,27 @@ export const addMembers = async (req: Request, res: Response) => {
         role: "MEMBER",
       },
     });
+
+    const members = await prisma.membership.findMany({
+      where: {
+        organizationId
+      },
+      select: {
+        userId: true
+      }
+    })
+
+    await prisma.notification.createMany({
+      data: members
+        .filter(member => member.userId !== userId && member.userId !== user.id)
+        .map(member => ({
+          userId: member.userId,
+          organizationId,
+          type: 'NEW_MEMBER',
+          message: `${user.name} joined the organization`,
+        })),
+    });
+
 
     return res.status(201).json({
       success: true,
@@ -158,7 +196,7 @@ export const getMembers = async (req: Request, res: Response) => {
       },
     });
 
-    const totalMembers = await prisma.membership.count({where: {organizationId}});
+    const totalMembers = await prisma.membership.count({ where: { organizationId } });
 
     return res.status(200).json({
       success: true,
@@ -182,12 +220,20 @@ export const getOrganizationBySlug = async (req: Request, res: Response) => {
 
     const userId = (req as any).user.userId;
 
-    const organization = await prisma.organization.findUnique({
-      where: { slug },
-      include: {
+    const organization = await prisma.organization.findFirst({
+      where: {
+        slug,
         members: {
-          include: { user: { select: { id: true, name: true, email: true } } },
+          some: {
+            userId,
+          },
         },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        createdAt: true,
       },
     });
 
@@ -196,12 +242,6 @@ export const getOrganizationBySlug = async (req: Request, res: Response) => {
         success: false,
         message: "Organization not found",
       });
-    }
-
-    const isMember = organization.members.some((m) => m.userId === userId);
-
-    if (!isMember) {
-      return res.status(403).json({ success: false, message: "Access denied" });
     }
 
     return res.status(200).json({
@@ -284,21 +324,72 @@ export const deleteOrganization = async (req: Request, res: Response) => {
 // remove member from organization
 export const removeMember = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const requesterId = Number((req as any).user.userId);
+    const organizationId = Number(req.params.organizationId);
+    const memberId = Number(req.params.memberId);
 
-    const removerId = Number(req.params.removerId);
+    if (!organizationId || !memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid organization or member id",
+      });
+    }
 
-    const user = await prisma.user.findFirst({
-      where: { id: userId },
+    const ownerMembership = await prisma.membership.findFirst({
+      where: {
+        organizationId,
+        userId: requesterId,
+        role: "OWNER",
+      },
     });
+
+    if (!ownerMembership) {
+      return res.status(403).json({
+        success: false,
+        message: "Only organization owners can remove members",
+      });
+    }
+
+    const membership = await prisma.membership.findFirst({
+      where: {
+        id: memberId,
+        organizationId,
+      },
+    });
+
+    if (!membership) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found in this organization",
+      });
+    }
+
+    if (membership.role === "OWNER") {
+      return res.status(400).json({
+        success: false,
+        message: "Owner cannot be removed",
+      });
+    }
+
+    if (membership.userId === requesterId) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot remove yourself",
+      });
+    }
 
     await prisma.membership.delete({
-      where: { id: removerId },
+      where: { id: memberId },
     });
 
-    return res
-      .status(200)
-      .json({ success: true, message: "member removed successfully" });
+    return res.status(200).json({
+      success: true,
+      message: "Member removed successfully",
+      data: {
+        memberId,
+        userId: membership.userId,
+      },
+    });
   } catch (error) {
     console.error(`error in removing member: ${error}`);
     return res

@@ -8,44 +8,77 @@ import {
   getAllGroupMembers,
   getConversationMessages,
   getGroupMessages,
-  getGroups,
   getUserConversations,
   getUserGroups,
+  removeMemberFromGroup,
 } from "../controllers/message.controller.js";
+
 const router = Router();
 
-// create personal message
-router.post("/personal/:receiverId/message", authMiddleware, createMessage);
+// ── Direct Messages ──────────────────────────────────────────────────────────
 
-// create group message
-router.post("/groups/:groupId/message", authMiddleware, createGroupMessage);
+// Send a personal message (creates conversation if needed)
+router.post(
+  "/personal/:organizationId/:receiverId/message",
+  authMiddleware,
+  createMessage,
+);
 
-// create group message
-router.post("/groups/:organizationId", authMiddleware, createGroup);
-
-// get conversations
-router.get("/conversation", authMiddleware, getUserConversations);
-
-// get conversation detail
+// Get all conversations for current user in an org
 router.get(
-  "/conversation/:conversationId",
+  "/conversation/org/:organizationId",
+  authMiddleware,
+  getUserConversations,
+);
+
+// Get messages in a specific conversation
+router.get(
+  "/conversation/org/:organizationId/:conversationId/messages",
   authMiddleware,
   getConversationMessages,
 );
 
-// get all groups
-router.get("/groups/all", authMiddleware, getGroups);
+// ── Groups ───────────────────────────────────────────────────────────────────
 
-// get users groups
-router.get("/groups", authMiddleware, getUserGroups);
+// Create a group in an org
+router.post("/groups/org/:organizationId", authMiddleware, createGroup);
 
-// get group message
-router.get("/groups/:groupId", authMiddleware, getGroupMessages);
+// Get all groups the current user belongs to in an org
+router.get("/groups/org/:organizationId", authMiddleware, getUserGroups);
 
-//add member to the group
-router.post('/groups/:groupId/member', authMiddleware, addMembersInGroup)
+// Send a message to a group (orgId scopes the auth check)
+router.post(
+  "/groups/org/:organizationId/:groupId/message",
+  authMiddleware,
+  createGroupMessage,
+);
 
-//get all group members
-router.get('/groups/:groupId/member' , authMiddleware , getAllGroupMembers)
+// Get messages in a specific group
+router.get(
+  "/groups/org/:organizationId/:groupId/messages",
+  authMiddleware,
+  getGroupMessages,
+);
+
+// Add a member to a group
+router.post(
+  "/groups/org/:organizationId/:groupId/member",
+  authMiddleware,
+  addMembersInGroup,
+);
+
+// Remove a member from a group (owner only)
+router.delete(
+  "/groups/org/:organizationId/:groupId/member/:memberUserId",
+  authMiddleware,
+  removeMemberFromGroup,
+);
+
+// Get all members of a group
+router.get(
+  "/groups/org/:organizationId/:groupId/member",
+  authMiddleware,
+  getAllGroupMembers,
+);
 
 export default router;

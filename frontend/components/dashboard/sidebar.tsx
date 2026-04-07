@@ -22,6 +22,7 @@ import {
   Building2,
   Plus,
   UserPlus,
+  Bell,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -48,10 +49,13 @@ const items = [
     title: "Snippets",
     icon: SquareDashedBottomCode,
   },
-  { id: 2, path: "/dashboard/fav", title: "Favorites", icon: Heart },
-  { id: 3, path: "/dashboard/recent", title: "Recent", icon: Clock },
   { id: 4, path: "/dashboard/teams", title: "Teams", icon: Mail },
-  { id: 5, path: "/dashboard/collections", title: "Collections", icon: Folder },
+  {
+    id: 5,
+    path: "/dashboard/notifications",
+    title: "Notifications",
+    icon: Bell,
+  },
 ];
 
 const DashboardSidebar = () => {
@@ -85,7 +89,7 @@ const DashboardSidebar = () => {
     // e.g. /dashboard/snippets matches before /dashboard
     const sorted = [...items].sort((a, b) => b.path.length - a.path.length);
     const match = sorted.find((item) =>
-      pathname.includes(item.path.replace("/dashboard", "dashboard"))
+      pathname.includes(item.path.replace("/dashboard", "dashboard")),
     );
     return match?.id ?? 0;
   })();
@@ -101,6 +105,15 @@ const DashboardSidebar = () => {
       router.replace(`/organization/${data[0].slug}/dashboard`);
     }
   }, [data, isPending, slug, router]);
+
+  useEffect(() => {
+    if (!currentSlug) return;
+    const base = `/organization/${currentSlug}/dashboard`;
+    router.prefetch(base);
+    router.prefetch(`${base}/snippets`);
+    router.prefetch(`${base}/teams`);
+    router.prefetch(`${base}/notifications`);
+  }, [currentSlug, router]);
 
   return (
     <div
@@ -209,41 +222,41 @@ const DashboardSidebar = () => {
 
                 <div className="mx-3 border-t border-white/6" />
 
-                {/* Invite member */}
-                <div className="px-1 py-1">
-                  <DropdownMenuItem
-                    className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
-                    style={{ color: "#a3a3a3" }}
-                    onSelect={(e) => e.preventDefault()}
-                    onClick={() => setInviteOpen(true)}
-                  >
-                    <div
-                      className="flex items-center justify-center size-6 rounded-md shrink-0"
-                      style={{ background: "rgba(255,255,255,0.06)" }}
+                {/* Invite member (owner only) */}
+                {activeOrganization?.role === "OWNER" && (
+                  <div className="px-1 py-1">
+                    <DropdownMenuItem
+                      className="flex items-center gap-2.5 px-2 py-2 rounded-[6px] cursor-pointer hover:bg-white/6 focus:bg-white/6 focus:text-neutral-200 hover:text-neutral-200"
+                      style={{ color: "#a3a3a3" }}
+                      onSelect={(e) => e.preventDefault()}
+                      onClick={() => setInviteOpen(true)}
                     >
-                      <UserPlus
-                        className="size-3.5"
-                        style={{ color: "#a3a3a3" }}
-                        strokeWidth={1.8}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-neutral-300">
-                        Invite members
-                      </p>
-                      <p className="text-[11px] text-neutral-500 truncate">
-                        Add teammates via email
-                      </p>
-                    </div>
-                  </DropdownMenuItem>
-                  {activeOrganization && (
+                      <div
+                        className="flex items-center justify-center size-6 rounded-md shrink-0"
+                        style={{ background: "rgba(255,255,255,0.06)" }}
+                      >
+                        <UserPlus
+                          className="size-3.5"
+                          style={{ color: "#a3a3a3" }}
+                          strokeWidth={1.8}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-neutral-300">
+                          Invite members
+                        </p>
+                        <p className="text-[11px] text-neutral-500 truncate">
+                          Add teammates via email
+                        </p>
+                      </div>
+                    </DropdownMenuItem>
                     <InviteMembersDialog
                       open={inviteOpen}
                       onOpenChange={setInviteOpen}
                       organizationId={activeOrganization.id}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
 
                 <div className="mx-3 border-t border-white/6" />
 

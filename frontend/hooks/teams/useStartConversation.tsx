@@ -13,15 +13,24 @@ export interface StartConversationResponse {
 export const useStartConversation = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<StartConversationResponse, Error, { receiverId: number }>({
-    mutationFn: async ({ receiverId }) => {
-      // Send an empty "hello" or use a dedicated start-conversation endpoint
-      // Adjust the endpoint to match your backend
-      const res = await api.post(`/api/messages/personal/${receiverId}/start`);
+  return useMutation<
+    StartConversationResponse,
+    Error,
+    { receiverId: number; organizationId: number; content?: string }
+  >({
+    mutationFn: async ({ receiverId, organizationId, content }) => {
+      const res = await api.post(
+        `/api/messages/personal/${organizationId}/${receiverId}/message`,
+        {
+          content: content ?? "Hi",
+        },
+      );
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: messageQueryKeys.conversations() });
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: [...messageQueryKeys.conversations(), vars.organizationId],
+      });
     },
   });
 };
