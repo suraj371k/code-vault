@@ -73,8 +73,9 @@ enum Language {
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
-  password  String
+  password  String?
   name      String
+  googleId  String?  @unique
   createdAt DateTime @default(now())
 
   memberships Membership[]

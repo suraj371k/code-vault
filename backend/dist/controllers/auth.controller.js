@@ -32,7 +32,7 @@ export const signup = async (req, res) => {
                 select: {
                     id: true,
                     name: true,
-                    email: true
+                    email: true,
                 },
             });
             await tx.organization.create({
@@ -83,6 +83,11 @@ export const login = async (req, res) => {
         if (!user) {
             return res
                 .status(404)
+                .json({ success: false, message: "Invalid credentials" });
+        }
+        if (!user.password) {
+            return res
+                .status(400)
                 .json({ success: false, message: "Invalid credentials" });
         }
         const isMatch = await bcrypt.compare(password, user.password);
@@ -177,5 +182,48 @@ export const profile = async (req, res) => {
         return res
             .status(500)
             .json({ success: false, message: "Internal server error" });
+    }
+};
+export const googleCallback = async (req, res) => {
+    try {
+        const user = req.user;
+        if (!user) {
+            return res.redirect(`${process.env.CORS_ORIGIN}/login?error=authentication_failed`);
+        }
+        const token = jwt.sign({ userId: user.userId, email: user.email }, process.env.JWT_SECRET, {
+            expiresIn: "5d",
+        });
+        // Set JWT token in cookies
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "none",
+            maxAge: 5 * 24 * 60 * 60 * 1000,
+        });
+        // Get user's first organization
+        const userWithOrg = await prisma.user.findUnique({
+            where: { id: user.userId },
+            select: {
+                memberships: {
+                    select: {
+                        organization: {
+                            select: {
+                                slug: true,
+                            },
+                        },
+                    },
+                    take: 1,
+                },
+            },
+        });
+        const orgSlug = userWithOrg?.memberships?.[0]?.organization?.slug;
+        if (orgSlug) {
+            return res.redirect(`${process.env.CORS_ORIGIN}/organization/${orgSlug}/dashboard`);
+        }
+        return res.redirect(`${process.env.CORS_ORIGIN}/`);
+    }
+    catch (error) {
+        console.error(`error in googleCallback controller: ${error}`);
+        return res.redirect(`${process.env.CORS_ORIGIN}/login?error=internal_server_error`);
     }
 };

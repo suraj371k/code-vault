@@ -1,6 +1,15 @@
 import jwt from "jsonwebtoken";
 export const authMiddleware = (req, res, next) => {
     try {
+        if (req.isAuthenticated && req.isAuthenticated()) {
+            const googleUser = req.user;
+            req.user = {
+                userId: googleUser.userId, // using userId from transformed user
+                email: googleUser.email,
+                name: googleUser.name,
+            };
+            return next();
+        }
         const token = req.cookies?.token;
         if (!token) {
             return res
