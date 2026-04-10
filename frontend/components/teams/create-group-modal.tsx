@@ -81,16 +81,18 @@ const CreateGroupModal = ({
       {
         onSuccess: async (res) => {
           const groupId = res?.data?.id;
-          // Add each selected member to the newly created group
           if (groupId && selectedMembers.length > 0) {
             const membersList = members.filter((m) =>
               selectedMembers.includes(m.userId),
             );
             await Promise.allSettled(
               membersList.map((m) =>
-                api.post(`/api/messages/groups/org/${organizationId}/${groupId}/member`, {
-                  email: m.user.email,
-                }),
+                api.post(
+                  `/api/messages/groups/org/${organizationId}/${groupId}/member`,
+                  {
+                    email: m.user.email,
+                  },
+                ),
               ),
             );
           }

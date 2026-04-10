@@ -127,12 +127,8 @@ export const createMessage = async (req: Request, res: Response) => {
       });
     }
 
-    // emit to receiver
     const io = getIO();
-    io.to(`user:${receiverId}`).emit("newMessage", {
-      message,
-      receiver,
-    });
+    io.to(`conversation:${conversation.id}`).emit("newMessage", message);
 
     return res.status(201).json({
       success: true,
@@ -459,12 +455,10 @@ export const removeMemberFromGroup = async (req: Request, res: Response) => {
       !Number.isFinite(organizationId) ||
       !Number.isFinite(memberUserId)
     ) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Invalid group, organization, or member id",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid group, organization, or member id",
+      });
     }
 
     const group = await prisma.group.findFirst({

@@ -27,10 +27,10 @@ export const useAiChat = (snippetId: number, snippetTitle: string) => {
     abortRef.current = new AbortController();
 
     try {
-      const res = await fetch(`http://localhost:5000/api/ai/${snippetId}`, {
+      const res = await fetch(`http://localhost:5001/api/ai/${snippetId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // sends cookie for authMiddleware
+        credentials: "include",
         body: JSON.stringify({ question: text }),
         signal: abortRef.current.signal,
       });

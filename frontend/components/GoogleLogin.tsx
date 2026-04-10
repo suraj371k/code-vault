@@ -10,8 +10,6 @@ const GoogleLogin = () => {
   const router = useRouter();
 
   const handleGoogleLogin = () => {
-    // Redirect to the backend Google OAuth endpoint
-    // The backend will handle the Google OAuth flow and redirect back
     window.location.href = "http://localhost:5001/api/auth/google";
   };
 

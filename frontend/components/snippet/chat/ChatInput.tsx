@@ -47,7 +47,7 @@ export const ChatInput = ({
   const canSend = value.trim().length > 0 && !isLoading;
 
   return (
-    <div className="px-4 pb-4 pt-3 border-t border-zinc-800/60 bg-gradient-to-b from-zinc-950/50 to-black/60 flex-shrink-0">
+    <div className="px-4 pb-4 pt-3 border-t border-zinc-800/60 bg-linear-to-b from-zinc-950/50 to-black/60 shrink-0">
       <div className="relative flex items-end gap-2">
         {/* Textarea wrapper */}
         <div className="relative flex-1 group">
@@ -71,8 +71,12 @@ export const ChatInput = ({
             style={{ fontFamily: "'JetBrains Mono','Fira Code',monospace" }}
           />
           {/* Subtle glow on focus */}
-          <div className="absolute inset-0 rounded-xl pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity duration-300"
-            style={{ boxShadow: "0 0 0 1px rgba(45,212,191,0.15), 0 4px 20px rgba(45,212,191,0.05)" }}
+          <div
+            className="absolute inset-0 rounded-xl pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity duration-300"
+            style={{
+              boxShadow:
+                "0 0 0 1px rgba(45,212,191,0.15), 0 4px 20px rgba(45,212,191,0.05)",
+            }}
           />
         </div>
 
@@ -94,7 +98,9 @@ export const ChatInput = ({
               size="sm"
               title="Send message (Enter)"
               className="h-10 w-10 p-0 rounded-xl bg-teal-400 text-black hover:bg-teal-300 disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150"
-              style={canSend ? { boxShadow: "0 0 16px rgba(45,212,191,0.40)" } : {}}
+              style={
+                canSend ? { boxShadow: "0 0 16px rgba(45,212,191,0.40)" } : {}
+              }
             >
               <Send className="w-3.5 h-3.5" />
             </Button>
@@ -105,11 +111,17 @@ export const ChatInput = ({
       {/* Hint row */}
       <div className="flex items-center justify-between mt-2 px-0.5">
         <p className="text-zinc-700 text-[9px] tracking-wide">
-          Press <kbd className="text-zinc-600 bg-zinc-900 border border-zinc-800 rounded px-1 py-0.5 text-[8px]">Enter</kbd> to send · <kbd className="text-zinc-600 bg-zinc-900 border border-zinc-800 rounded px-1 py-0.5 text-[8px]">Shift+Enter</kbd> for newline
+          Press{" "}
+          <kbd className="text-zinc-600 bg-zinc-900 border border-zinc-800 rounded px-1 py-0.5 text-[8px]">
+            Enter
+          </kbd>{" "}
+          to send ·{" "}
+          <kbd className="text-zinc-600 bg-zinc-900 border border-zinc-800 rounded px-1 py-0.5 text-[8px]">
+            Shift+Enter
+          </kbd>{" "}
+          for newline
         </p>
-        <p className="text-zinc-800 text-[9px]">
-          AI may be inaccurate
-        </p>
+        <p className="text-zinc-800 text-[9px]">AI may be inaccurate</p>
       </div>
     </div>
   );

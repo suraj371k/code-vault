@@ -315,7 +315,6 @@ function Skel({ className = "" }: { className?: string }) {
 
 export default function Dashboard() {
   const { slug } = useParams();
-  const router = useRouter();
 
   const { data: profile } = useProfile();
   const { data: org, isPending: orgLoading } = useOrganization(slug as string);

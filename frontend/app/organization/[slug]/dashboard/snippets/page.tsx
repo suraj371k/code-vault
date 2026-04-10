@@ -43,6 +43,8 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { CollectionsSidebar, CollectionFilter } from "@/components/snippet";
+import { socket } from "@/lib/socket";
+import { useQueryClient } from "@tanstack/react-query";
 
 /* ── Helpers ─────────────────────────────────────── */
 const LANG_COLORS: Record<
@@ -416,6 +418,41 @@ const Snippets = () => {
     totalSnippets = displaySnippets.length;
     totalPages = 1;
   }
+
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!orgId) return;
+
+    // ── Connect socket if not already connected ──
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    // ── Join org room so we receive newSnippet events ──
+    socket.emit("joinOrganization", orgId);
+
+    // ── FIX: invalidate ALL paginated variants of get-snippets ──
+    // The old code used setQueryData(["snippets", orgId]) which never matched
+    // the real query key ["get-snippets", orgId, page, search].
+    socket.on("newSnippet", () => {
+      queryClient.invalidateQueries({ queryKey: ["get-snippets", orgId] });
+      toast("✨ New snippet added!", {
+        icon: "📋",
+        style: {
+          background: "#0f172a",
+          border: "1px solid rgba(20,184,166,0.3)",
+          color: "#2dd4bf",
+          fontSize: "13px",
+          fontFamily: "'JetBrains Mono', monospace",
+        },
+      });
+    });
+
+    return () => {
+      socket.off("newSnippet");
+    };
+  }, [orgId, queryClient]);
 
   if (orgLoading || !organization) {
     return (

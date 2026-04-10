@@ -11,9 +11,6 @@ import {
 } from "@/components/ui/sidebar";
 
 import {
-  Clock,
-  Folder,
-  Heart,
   Mail,
   SquareDashedBottomCode,
   LayoutDashboard,
