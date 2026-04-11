@@ -1,20 +1,20 @@
-# 🚀 Code Vault – AI Powered Code Snippet Platform
+#  Code Vault – AI Powered Code Snippet Platform
 
-A full-stack **Code Snippet Management Platform** built using the **PERN stack with TypeScript**.  
-Users can authenticate, create code snippets, generate AI-powered summaries, and store everything securely in the database.
+A full-stack multi tenant **Code Snippet Management Platform** built using the **PERN stack with TypeScript**.  
+Users can authenticate , create organizations , add members inside organization, create code snippets, generate AI-powered summaries, and store everything securely in the database.
 
 Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 
 ---
 
-## 🧠 Features
+##  Features
 
 -    User Authentication (JWT-based)
+-    Added multi tenant feature so user can create there own organization and add team members
 -    Create and manage code snippets
 -    AI-powered code summarization
--    Save snippets and summaries in PostgreSQL
--    Real Time chat feature with socket.io (personal and group)
 -    Personalize chat-bot for each snippets
+-    Real Time chat feature with socket.io (personal and group)
 -    Dockerized backend
 -    CI/CD pipeline with GitHub Actions
 -    Deployment on Render
@@ -30,10 +30,13 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 - TypeScript
 - Prisma ORM
 - PostgreSQL (Supabase)
+- Redis for caching
 
 ### Frontend
 - Next.js
 - TypeScript
+- Shadcn UI
+- Tailwind CSS
 
 ### DevOps
 - Docker
@@ -42,9 +45,9 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 
 ---
 
-## 🔐 Authentication Flow
+##  Authentication Flow
 
-1. User registers with email & password
+1. User registers with email & password or login with google
 2. Password is securely hashed
 3. JWT token is generated upon login
 4. Token is required for protected routes
@@ -52,7 +55,15 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 
 ---
 
-## ✍️ Snippet Creation Flow
+## Organization Flow
+1. When user signup default organization will created
+2. users can create other organizations as well
+3. organization owner can add other member
+4. organization owner can manage user
+5. members inside the organization can chat with other members in real time
+
+
+##  Snippet Creation Flow
 
 1. Authenticated user submits:
    - Title
@@ -61,12 +72,12 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 2. Backend validates request
 3. Snippet is stored in PostgreSQL
 4. Linked to the authenticated user
+5. Integated Redis for snippet caching
+6. Added realtime feature using socket.io
 
 ---
 
-
-
-## 🤖 AI Summarization Flow
+##  AI Summarization Flow
 
 1. User submits a code snippet
 2. Backend sends code to AI service
@@ -89,5 +100,7 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 4. group is visible only to only member of the group
 
 ## Notification Feature
+1. When new user or snippt will create user inside organization get notification in real time
+2. added redis caching for notifications
 
 ### Work in progress.....
