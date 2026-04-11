@@ -17,6 +17,7 @@ import messageRoutes from "./routes/message.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import passport from "passport";
+import redisClient from "./lib/redis.js";
 
 dotenv.config();
 
@@ -131,6 +132,24 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 const port = process.env.PORT!;
+
+// const startServer = async () => {
+//   try {
+//     if (!redisClient.isOpen) {
+//       await redisClient.connect();
+//       console.log("Redis connected");
+//     }
+
+//     server.listen(port, () => {
+//       console.log("Server is running on port: ", port);
+//     });
+//   } catch (error) {
+//     console.error("Failed to start server:", error);
+//     process.exit(1);
+//   }
+// };
+
+// startServer();
 
 server.listen(port, () => {
   console.log("Server is running on port: ", port);

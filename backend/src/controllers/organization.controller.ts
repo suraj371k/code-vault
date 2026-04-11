@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
+import { invalidateNotifications } from "../lib/utils.js";
 
 export const generateSlug = (name: string): string => {
   return name
@@ -138,24 +139,27 @@ export const addMembers = async (req: Request, res: Response) => {
 
     const members = await prisma.membership.findMany({
       where: {
-        organizationId
+        organizationId,
       },
       select: {
-        userId: true
-      }
-    })
+        userId: true,
+      },
+    });
 
     await prisma.notification.createMany({
       data: members
-        .filter(member => member.userId !== userId && member.userId !== user.id)
-        .map(member => ({
+        .filter(
+          (member) => member.userId !== userId && member.userId !== user.id,
+        )
+        .map((member) => ({
           userId: member.userId,
           organizationId,
-          type: 'NEW_MEMBER',
+          type: "NEW_MEMBER",
           message: `${user.name} joined the organization`,
         })),
     });
 
+    await invalidateNotifications(organizationId);
 
     return res.status(201).json({
       success: true,
@@ -191,12 +195,14 @@ export const getMembers = async (req: Request, res: Response) => {
             name: true,
             email: true,
             createdAt: true,
-          }
-        }
+          },
+        },
       },
     });
 
-    const totalMembers = await prisma.membership.count({ where: { organizationId } });
+    const totalMembers = await prisma.membership.count({
+      where: { organizationId },
+    });
 
     return res.status(200).json({
       success: true,

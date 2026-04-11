@@ -3,16 +3,14 @@ import { prisma } from "../lib/prisma.js";
 import { generateSummary } from "../services/generate-summary.js";
 import { Language } from "../generated/prisma/enums.js";
 import { getIO } from "../lib/socket.js";
+import redisClient from "../lib/redis.js";
+import {
+  invalidateNotifications,
+  invalidateSnippets,
+  toLanguage,
+} from "../lib/utils.js";
 
 // helpers
-function toLanguage(raw: unknown): Language | undefined {
-  if (typeof raw !== "string") return undefined;
-  const upper = raw.toUpperCase();
-  if (Object.values(Language).includes(upper as Language)) {
-    return upper as Language;
-  }
-  return undefined;
-}
 
 // controllers
 
@@ -79,6 +77,9 @@ export const createSnippets = async (req: Request, res: Response) => {
       },
     });
 
+    // invalidate cache after snippet is created
+    await invalidateSnippets(organizationId);
+
     const io = getIO();
 
     // for snippet real time update
@@ -91,7 +92,7 @@ export const createSnippets = async (req: Request, res: Response) => {
       select: { userId: true },
     });
 
-    const notifications = await prisma.notification.createMany({
+    await prisma.notification.createMany({
       data: members
         .filter((member) => member.userId !== userId)
         .map((member) => ({
@@ -102,6 +103,8 @@ export const createSnippets = async (req: Request, res: Response) => {
           snippetId: snippet.id,
         })),
     });
+
+    await invalidateNotifications(organizationId);
 
     // for real time notification
     members
@@ -142,6 +145,15 @@ export const getOrganizationSnippet = async (req: Request, res: Response) => {
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 8));
     const skip = (page - 1) * limit;
     const category = req.query.category as string | undefined;
+
+    const cacheKey = `org:${organizationId}:snippets:${page}:${limit}:${search || "none"}:${category || "all"}`;
+
+    // check redis
+    const cachedData = await redisClient.get(cacheKey);
+
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
 
     const baseWhere: Record<string, unknown> = { organizationId };
     if (category) {
@@ -196,14 +208,21 @@ export const getOrganizationSnippet = async (req: Request, res: Response) => {
       prisma.snippet.count({ where: whereClause as any }),
     ]);
 
-    return res.json({
+    const responseData = {
       success: true,
       page,
       limit,
       total,
       totalPages: Math.ceil(total / limit),
       data: snippets,
+    };
+
+    // store in redis
+    await redisClient.set(cacheKey, JSON.stringify(responseData), {
+      EX: 60,
     });
+
+    return res.json(responseData);
   } catch (error) {
     console.error(`error in get organization snippet ${error}`);
     return res
@@ -263,13 +282,21 @@ export const deleteSnippet = async (req: Request, res: Response) => {
   try {
     const snippetId = Number(req.params.snippetId);
 
-    if (!snippetId) {
+    const snippets = await prisma.snippet.findUnique({
+      where: {
+        id: snippetId,
+      },
+    });
+
+    if (!snippets) {
       return res
         .status(404)
         .json({ success: false, message: "snippet not found" });
     }
 
     await prisma.snippet.delete({ where: { id: snippetId } });
+
+    await invalidateSnippets(snippets.organizationId);
 
     return res
       .status(200)
@@ -315,6 +342,8 @@ export const updateSnippets = async (req: Request, res: Response) => {
       where: { id: snippetId },
       data: updates,
     });
+
+    await invalidateSnippets(snippet.organizationId);
 
     return res
       .status(200)

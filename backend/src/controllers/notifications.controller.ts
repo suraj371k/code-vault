@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
+import redisClient from "../lib/redis.js";
+import { invalidateNotifications } from "../lib/utils.js";
 
 export const getNotifications = async (req: Request, res: Response) => {
   try {
@@ -21,6 +23,14 @@ export const getNotifications = async (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 8));
     let skip = (page - 1) * limit;
+
+    const cacheKey = `org:${organizationId}:notifications:${userId}:${page}:${limit}`;
+
+    const cacheData = await redisClient.get(cacheKey);
+
+    if (cacheData) {
+      return res.json(JSON.parse(cacheData));
+    }
 
     const [notifications, total] = await Promise.all([
       prisma.notification.findMany({
@@ -55,14 +65,21 @@ export const getNotifications = async (req: Request, res: Response) => {
       }),
     ]);
 
-    return res.status(200).json({
+    const responseData = {
       success: true,
       message: "notification fetched successfully",
       page,
       limit,
       total,
       data: notifications,
+    };
+
+    // store in redis
+    await redisClient.set(cacheKey, JSON.stringify(responseData), {
+      EX: 60,
     });
+
+    return res.json(responseData);
   } catch (error) {
     console.error(`error in getting notifications: ${error}`);
     return res
@@ -99,6 +116,8 @@ export const deleteNotification = async (req: Request, res: Response) => {
         userId,
       },
     });
+
+    await invalidateNotifications(organizationId);
 
     return res
       .status(200)
@@ -154,13 +173,13 @@ export const markRead = async (req: Request, res: Response) => {
       },
     });
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "mark as read successfully",
-        data: updatedNotification,
-      });
+    await invalidateNotifications(organizationId);
+
+    return res.status(200).json({
+      success: true,
+      message: "mark as read successfully",
+      data: updatedNotification,
+    });
   } catch (error) {
     console.error(`error in markRead controller: ${error}`);
     return res
