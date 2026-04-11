@@ -41,8 +41,10 @@ export default function InviteMembersDialog({
           setEmail("");
           toast.success("member added successfully!");
         },
-        onError: (err) => {
-          console.error("Invite failed", err);
+        onError: (err: any) => {
+          const message =
+            err?.response?.data?.message || "something went wrong";
+          toast.error(message);
         },
       },
     );
@@ -160,7 +162,7 @@ export default function InviteMembersDialog({
                 type="submit"
                 disabled={isPending || !email}
                 onClick={handleSubmit}
-                 className="h-9 px-4 text-[13px] font-semibold rounded-lg border-0 transition-all hover:opacity-90 active:scale-[0.98] bg-teal-600 text-white disabled:opacity-50"
+                className="h-9 px-4 text-[13px] font-semibold rounded-lg border-0 transition-all hover:opacity-90 active:scale-[0.98] bg-teal-600 text-white disabled:opacity-50"
               >
                 Send invite
               </Button>

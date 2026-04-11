@@ -65,6 +65,7 @@ export const UserScalarFieldEnum = {
     email: 'email',
     password: 'password',
     name: 'name',
+    googleId: 'googleId',
     createdAt: 'createdAt'
 };
 export const OrganizationScalarFieldEnum = {

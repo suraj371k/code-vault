@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
 interface JwtPayload {
-  userId: string;
+  userId: number;
   email: string;
 }
 
@@ -12,6 +12,16 @@ export const authMiddleware = (
   next: NextFunction,
 ) => {
   try {
+    if (req.isAuthenticated && req.isAuthenticated()) {
+      const googleUser = req.user as any;
+      (req as any).user = {
+        userId: googleUser.userId, // using userId from transformed user
+        email: googleUser.email,
+        name: googleUser.name,
+      };
+      return next();
+    }
+
     const token = req.cookies?.token;
 
     if (!token) {

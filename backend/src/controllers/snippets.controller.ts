@@ -2,16 +2,15 @@
 import { prisma } from "../lib/prisma.js";
 import { generateSummary } from "../services/generate-summary.js";
 import { Language } from "../generated/prisma/enums.js";
+import { getIO } from "../lib/socket.js";
+import redisClient from "../lib/redis.js";
+import {
+  invalidateNotifications,
+  invalidateSnippets,
+  toLanguage,
+} from "../lib/utils.js";
 
 // helpers
-function toLanguage(raw: unknown): Language | undefined {
-  if (typeof raw !== "string") return undefined;
-  const upper = raw.toUpperCase();
-  if (Object.values(Language).includes(upper as Language)) {
-    return upper as Language;
-  }
-  return undefined;
-}
 
 // controllers
 
@@ -77,7 +76,17 @@ export const createSnippets = async (req: Request, res: Response) => {
         organizationId,
       },
     });
-    
+
+    // invalidate cache after snippet is created
+    await invalidateSnippets(organizationId);
+
+    const io = getIO();
+
+    // for snippet real time update
+    io.to(`organization:${organizationId}`).emit("newSnippet", {
+      snippet,
+    });
+
     const members = await prisma.membership.findMany({
       where: { organizationId },
       select: { userId: true },
@@ -85,15 +94,28 @@ export const createSnippets = async (req: Request, res: Response) => {
 
     await prisma.notification.createMany({
       data: members
-        .filter(member => member.userId !== userId)
-        .map(member => ({
+        .filter((member) => member.userId !== userId)
+        .map((member) => ({
           userId: member.userId,
           organizationId,
-          type: 'SNIPPET',
+          type: "SNIPPET",
           message: `${title} snippet created`,
           snippetId: snippet.id,
         })),
     });
+
+    await invalidateNotifications(organizationId);
+
+    // for real time notification
+    members
+      .filter((member) => member.userId !== userId)
+      .forEach((member) => {
+        io.to(`user:${member.userId}`).emit("notification", {
+          type: "SNIPPET",
+          message: `${title} snippet created`,
+          snippetId: snippet.id,
+        });
+      });
 
     return res.status(201).json({
       success: true,
@@ -123,6 +145,15 @@ export const getOrganizationSnippet = async (req: Request, res: Response) => {
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 8));
     const skip = (page - 1) * limit;
     const category = req.query.category as string | undefined;
+
+    const cacheKey = `org:${organizationId}:snippets:${page}:${limit}:${search || "none"}:${category || "all"}`;
+
+    // check redis
+    const cachedData = await redisClient.get(cacheKey);
+
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
 
     const baseWhere: Record<string, unknown> = { organizationId };
     if (category) {
@@ -177,14 +208,21 @@ export const getOrganizationSnippet = async (req: Request, res: Response) => {
       prisma.snippet.count({ where: whereClause as any }),
     ]);
 
-    return res.json({
+    const responseData = {
       success: true,
       page,
       limit,
       total,
       totalPages: Math.ceil(total / limit),
       data: snippets,
+    };
+
+    // store in redis
+    await redisClient.set(cacheKey, JSON.stringify(responseData), {
+      EX: 60,
     });
+
+    return res.json(responseData);
   } catch (error) {
     console.error(`error in get organization snippet ${error}`);
     return res
@@ -244,13 +282,21 @@ export const deleteSnippet = async (req: Request, res: Response) => {
   try {
     const snippetId = Number(req.params.snippetId);
 
-    if (!snippetId) {
+    const snippets = await prisma.snippet.findUnique({
+      where: {
+        id: snippetId,
+      },
+    });
+
+    if (!snippets) {
       return res
         .status(404)
         .json({ success: false, message: "snippet not found" });
     }
 
     await prisma.snippet.delete({ where: { id: snippetId } });
+
+    await invalidateSnippets(snippets.organizationId);
 
     return res
       .status(200)
@@ -296,6 +342,8 @@ export const updateSnippets = async (req: Request, res: Response) => {
       where: { id: snippetId },
       data: updates,
     });
+
+    await invalidateSnippets(snippet.organizationId);
 
     return res
       .status(200)
@@ -522,7 +570,9 @@ export const addToFav = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: favSnippet.isFav ? "Snippet added to favourites" : "Snippet removed from favourites",
+      message: favSnippet.isFav
+        ? "Snippet added to favourites"
+        : "Snippet removed from favourites",
       data: favSnippet,
     });
   } catch (error) {
@@ -537,7 +587,9 @@ export const getCollections = async (req: Request, res: Response) => {
   try {
     const organizationId = Number(req.params.organizationId);
     if (!organizationId) {
-      return res.status(400).json({ success: false, message: "organization id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "organization id is required" });
     }
     const collections = await prisma.collection.findMany({
       where: { organizationId },
@@ -547,26 +599,37 @@ export const getCollections = async (req: Request, res: Response) => {
     return res.status(200).json({ success: true, data: collections });
   } catch (error) {
     console.error(`error in getCollections: ${error}`);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
-export const addExistingSnippetToCollection = async (req: Request, res: Response) => {
+export const addExistingSnippetToCollection = async (
+  req: Request,
+  res: Response,
+) => {
   try {
     const snippetId = Number(req.params.snippetId);
     const colId = Number(req.params.colId);
     if (!snippetId || !colId) {
-      return res.status(400).json({ success: false, message: "snippetId and colId are required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "snippetId and colId are required" });
     }
     const updated = await prisma.snippet.update({
       where: { id: snippetId },
       data: { collections: { connect: { id: colId } } },
       include: { collections: { select: { id: true, name: true } } },
     });
-    return res.status(200).json({ success: true, message: "Added to collection", data: updated });
+    return res
+      .status(200)
+      .json({ success: true, message: "Added to collection", data: updated });
   } catch (error) {
     console.error(`error in addExistingSnippetToCollection: ${error}`);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -574,7 +637,9 @@ export const removeFromFav = async (req: Request, res: Response) => {
   try {
     const snippetId = Number(req.params.snippetId);
     if (!snippetId) {
-      return res.status(400).json({ success: false, message: "snippet id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "snippet id is required" });
     }
     const updated = await prisma.snippet.update({
       where: { id: snippetId },
@@ -592,47 +657,66 @@ export const removeFromFav = async (req: Request, res: Response) => {
         author: { select: { id: true, name: true, email: true } },
       },
     });
-    return res.status(200).json({ success: true, message: "Removed from favourites", data: updated });
+    return res.status(200).json({
+      success: true,
+      message: "Removed from favourites",
+      data: updated,
+    });
   } catch (error) {
     console.error(`error in removeFromFav: ${error}`);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
 export const getFavSnippets = async (req: Request, res: Response) => {
   try {
-    const organizationId = Number(req.params.organizationId)
+    const organizationId = Number(req.params.organizationId);
 
     const organization = await prisma.organization.findUnique({
-      where: { id: organizationId }
-    })
+      where: { id: organizationId },
+    });
 
     if (!organization) {
-      return res.status(404).json({ success: false, message: "organization not found" })
+      return res
+        .status(404)
+        .json({ success: false, message: "organization not found" });
     }
 
     const favs = await prisma.snippet.findMany({
-      where: { isFav: true, organizationId }
-    })
+      where: { isFav: true, organizationId },
+    });
 
-    return res.status(200).json({ success: true, message: "favourite fetched success", data: favs })
-
+    return res.status(200).json({
+      success: true,
+      message: "favourite fetched success",
+      data: favs,
+    });
   } catch (error) {
-    console.error(`error in get fav snippets : ${error}`)
-    return res.status(500).json({ success: false, message: "internal server error" })
+    console.error(`error in get fav snippets : ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "internal server error" });
   }
-}
+};
 
 export const deleteCollection = async (req: Request, res: Response) => {
   try {
     const colId = Number(req.params.colId);
     if (!colId) {
-      return res.status(400).json({ success: false, message: "collection id is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "collection id is required" });
     }
     await prisma.collection.delete({ where: { id: colId } });
-    return res.status(200).json({ success: true, message: "Collection deleted successfully" });
+    return res
+      .status(200)
+      .json({ success: true, message: "Collection deleted successfully" });
   } catch (error) {
     console.error(`error in deleteCollection: ${error}`);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };

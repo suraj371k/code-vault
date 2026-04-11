@@ -69,6 +69,22 @@ function getOtherParticipants(conversation: Conversation, myId: number) {
   return others.length > 0 ? others : conversation.participants;
 }
 
+function getMessageSenderName(
+  message: Conversation["messages"][number],
+  conversation: Conversation,
+  myId: number,
+) {
+  if (!message) return "Unknown";
+  if (Number(message.senderId) === myId) return "You";
+  if (message.sender?.name) return message.sender.name;
+  const participant = conversation.participants.find(
+    (p) => Number(p.userId) === Number(message.senderId),
+  );
+  if (participant?.user?.name) return participant.user.name;
+  const other = getOtherParticipants(conversation, myId)[0];
+  return other?.user?.name ?? "Unknown";
+}
+
 /* ─── ConversationItem ─── */
 
 interface ConversationItemProps {
@@ -88,10 +104,9 @@ function ConversationItem({
   const primaryParticipant = others[0];
   const extraCount = others.length - 1;
   const lastMessage = conversation.messages?.[0];
-  const lastMsgPrefix =
-    lastMessage && Number(lastMessage.senderId) === myId
-      ? "You"
-      : (lastMessage?.sender?.name ?? null);
+  const lastMsgPrefix = lastMessage
+    ? getMessageSenderName(lastMessage, conversation, myId)
+    : null;
 
   return (
     <button
@@ -428,12 +443,16 @@ const ChatList = ({
 
     // Refresh group list when this user is added to a group
     const handleAddedToGroup = () => {
-      queryClient.invalidateQueries({ queryKey: [...messageQueryKeys.myGroups(), orgId] });
+      queryClient.invalidateQueries({
+        queryKey: [...messageQueryKeys.myGroups(), orgId],
+      });
     };
 
     // Refresh conversation list when a new DM arrives (scoped to this org)
     const handleNewMessage = () => {
-      queryClient.invalidateQueries({ queryKey: [...messageQueryKeys.conversations(), orgId] });
+      queryClient.invalidateQueries({
+        queryKey: [...messageQueryKeys.conversations(), orgId],
+      });
     };
 
     socket.on("addedToGroup", handleAddedToGroup);
@@ -589,7 +608,7 @@ const ChatList = ({
         </div>
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
           {/* Loading skeletons */}
           {isLoading &&
             Array.from({ length: 5 }).map((_, i) => <SkeletonItem key={i} />)}
@@ -652,18 +671,20 @@ const ChatList = ({
 
           {/* ── Members (no existing conversation) ── */}
           {!isLoading && !error && newMembers.length > 0 && (
-            <>
+            <div className="pt-3 mt-3 border-t border-teal-950/30">
               <SectionLabel label="Members" count={newMembers.length} />
-              {newMembers.map((member) => (
-                <MemberItem
-                  key={member.userId}
-                  member={member}
-                  onStartChat={handleStartChat}
-                  isStarting={sendingMessage}
-                  startingId={startingMemberId}
-                />
-              ))}
-            </>
+              <div className="space-y-1">
+                {newMembers.map((member) => (
+                  <MemberItem
+                    key={member.userId}
+                    member={member}
+                    onStartChat={handleStartChat}
+                    isStarting={sendingMessage}
+                    startingId={startingMemberId}
+                  />
+                ))}
+              </div>
+            </div>
           )}
 
           {/* ── Empty state ── */}

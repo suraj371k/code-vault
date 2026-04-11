@@ -63,7 +63,10 @@ const CreateSnippetForm = ({
   // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
         setLangDropdownOpen(false);
         setLangSearch("");
       }
@@ -73,7 +76,7 @@ const CreateSnippetForm = ({
   }, []);
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     setData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
@@ -97,16 +100,25 @@ const CreateSnippetForm = ({
       },
       {
         onSuccess: () => {
-          toast.success("Snippet created!");
+          toast.success("Snippet saved!", {
+            style: {
+              background: "#0f172a",
+              border: "1px solid rgba(20,184,166,0.3)",
+              color: "#2dd4bf",
+              fontSize: "13px",
+            },
+          });
+          onOpenChange(false);
         },
-      }
+        onError: () => {
+          toast.error("Failed to save snippet. Please try again.");
+        },
+      },
     );
-    setData({ title: "", code: "", category: "", language: undefined });
-    onOpenChange(false);
   };
 
   const filteredLanguages = languages.filter((lang) =>
-    lang.toLowerCase().includes(langSearch.toLowerCase())
+    lang.toLowerCase().includes(langSearch.toLowerCase()),
   );
 
   // Pretty-print enum value → "TypeScript" style
@@ -149,7 +161,11 @@ const CreateSnippetForm = ({
                   border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
-                <Code2 className="size-4" style={{ color: "#e5e5e5" }} strokeWidth={1.6} />
+                <Code2
+                  className="size-4"
+                  style={{ color: "#e5e5e5" }}
+                  strokeWidth={1.6}
+                />
               </div>
               <div>
                 <DialogTitle
@@ -230,7 +246,9 @@ const CreateSnippetForm = ({
                       className="size-3.5 transition-transform duration-200"
                       style={{
                         color: "#555",
-                        transform: langDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                        transform: langDropdownOpen
+                          ? "rotate(180deg)"
+                          : "rotate(0deg)",
                       }}
                     />
                   </div>
@@ -251,7 +269,10 @@ const CreateSnippetForm = ({
                       className="flex items-center gap-2 px-3 py-2 border-b"
                       style={{ borderColor: "rgba(255,255,255,0.06)" }}
                     >
-                      <Search className="size-3.5 shrink-0" style={{ color: "#555" }} />
+                      <Search
+                        className="size-3.5 shrink-0"
+                        style={{ color: "#555" }}
+                      />
                       <input
                         autoFocus
                         value={langSearch}
@@ -285,11 +306,13 @@ const CreateSnippetForm = ({
                                 }}
                                 onMouseEnter={(e) => {
                                   if (!selected)
-                                    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                                    e.currentTarget.style.background =
+                                      "rgba(255,255,255,0.04)";
                                 }}
                                 onMouseLeave={(e) => {
                                   if (!selected)
-                                    e.currentTarget.style.background = "transparent";
+                                    e.currentTarget.style.background =
+                                      "transparent";
                                 }}
                               >
                                 <span>{formatLang(lang)}</span>
