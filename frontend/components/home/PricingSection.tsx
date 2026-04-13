@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Check } from "lucide-react";
+import { useCheckout, useUserPlan } from "@/hooks/payment/usePayment";
 
 const PRICING = {
   monthly: [
@@ -10,6 +11,7 @@ const PRICING = {
       period: "/month",
       popular: false,
       cta: "Get Started Free",
+      planId: null, // no checkout needed
       features: [
         "1 Organization",
         "Up to 3 Users",
@@ -24,6 +26,7 @@ const PRICING = {
       period: "/month",
       popular: true,
       cta: "Start Pro Trial",
+      planId: "pro" as const, // ✅ maps to your backend
       features: [
         "3 Organizations",
         "Up to 20 Users",
@@ -39,7 +42,8 @@ const PRICING = {
       price: "$25",
       period: "/month",
       popular: false,
-      cta: "Contact Sales",
+      cta: "Upgrade to Enterprise",
+      planId: "enterprise" as const, // ✅ maps to your backend
       features: [
         "Unlimited Organizations",
         "Unlimited Users",
@@ -59,6 +63,7 @@ const PRICING = {
       period: "/year",
       popular: false,
       cta: "Get Started Free",
+      planId: null,
       features: [
         "1 Organization",
         "Up to 3 Users",
@@ -73,6 +78,7 @@ const PRICING = {
       period: "/year",
       popular: true,
       cta: "Start Pro Trial",
+      planId: "pro" as const,
       savings: "Save 20%",
       features: [
         "3 Organizations",
@@ -89,7 +95,8 @@ const PRICING = {
       price: "$240",
       period: "/year",
       popular: false,
-      cta: "Contact Sales",
+      cta: "Upgrade to Enterprise",
+      planId: "enterprise" as const,
       savings: "Save 20%",
       features: [
         "Unlimited Organizations",
@@ -108,6 +115,39 @@ const PRICING = {
 export function PricingSection() {
   const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
   const plans = PRICING[cycle];
+
+  const { mutate: checkout, isPending, variables } = useCheckout();
+  const { data: planData } = useUserPlan();
+
+  // current plan from DB e.g "PRO", "FREE", "ENTERPRISE"
+  const currentPlan = planData?.plan ?? "FREE";
+
+  const handleCheckout = (planId: "pro" | "enterprise" | null) => {
+    if (!planId) return; // Free plan — no checkout
+    checkout(planId);
+  };
+
+  const getButtonLabel = (
+    planId: "pro" | "enterprise" | null,
+    defaultCta: string,
+  ) => {
+    if (!planId) return defaultCta; // Free
+
+    const isCurrentPlan = currentPlan === planId.toUpperCase();
+    if (isCurrentPlan) return "Current Plan ✅";
+
+    const isLoading = isPending && variables === planId;
+    if (isLoading) return "Redirecting...";
+
+    return defaultCta;
+  };
+
+  const isButtonDisabled = (planId: "pro" | "enterprise" | null) => {
+    if (!planId) return false;
+    const isCurrentPlan = currentPlan === planId.toUpperCase();
+    const isLoading = isPending && variables === planId;
+    return isCurrentPlan || isLoading;
+  };
 
   return (
     <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8">
@@ -206,11 +246,15 @@ export function PricingSection() {
                   )}
                 </div>
 
+                {/* ✅ Wired up button */}
                 <button
+                  onClick={() => handleCheckout(plan.planId)}
+                  disabled={isButtonDisabled(plan.planId)}
                   className={`w-full py-3 rounded-xl font-bold text-sm transition-all duration-200 mb-8
-                  ${plan.popular ? "teal-btn" : "outline-btn"}`}
+                  ${plan.popular ? "teal-btn" : "outline-btn"}
+                  disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  {plan.cta}
+                  {getButtonLabel(plan.planId, plan.cta)}
                 </button>
 
                 <div className="space-y-3">

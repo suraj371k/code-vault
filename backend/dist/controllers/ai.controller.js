@@ -1,8 +1,9 @@
 import { ChatGoogle } from "@langchain/google";
 import { prisma } from "../lib/prisma.js";
+import { getWorkingModel } from "../services/helper.js";
 const llm = new ChatGoogle({
     apiKey: process.env.GEMINI_API_KEY,
-    model: "gemini-2.5-flash",
+    model: "gemini-2.5-flash-lite",
 });
 export const chatWithSnippet = async (req, res) => {
     try {
@@ -22,7 +23,8 @@ export const chatWithSnippet = async (req, res) => {
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
         res.flushHeaders();
-        const stream = await llm.stream(prompt);
+        const workingModel = await getWorkingModel(prompt);
+        const stream = await workingModel.stream(prompt);
         for await (const chunk of stream) {
             const text = chunk.content;
             if (text) {

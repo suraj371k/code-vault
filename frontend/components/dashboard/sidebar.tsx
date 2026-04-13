@@ -37,6 +37,8 @@ import {
 } from "../ui/dropdown-menu";
 import InviteMembersDialog from "../invite-member";
 import CreateOrganizationDialog from "../create-organization";
+import { useUserPlan } from "@/hooks/payment/usePayment";
+import { Badge } from "../ui/badge";
 
 const items = [
   { id: 0, path: "/dashboard", title: "Dashboard", icon: LayoutDashboard },
@@ -76,6 +78,8 @@ const DashboardSidebar = () => {
       },
     });
   };
+
+  const { data: currentPlan } = useUserPlan();
 
   const currentSlug = Array.isArray(slug) ? slug[0] : slug;
   const activeOrganization = data?.find((org) => org.slug === currentSlug);
@@ -148,8 +152,9 @@ const DashboardSidebar = () => {
               <p className="text-[10px] font-semibold tracking-[0.12em] uppercase text-teal-700 leading-none">
                 Organization
               </p>
-              <div className="text-[13px] font-semibold text-slate-200 mt-0.75 truncate leading-none">
+              <div className="text-[13px] flex flex-col gap-2 font-semibold text-slate-200 mt-0.75 truncate leading-none">
                 <p>{activeOrganization?.name ?? "..."}</p>
+                <Badge className="w-20 text-white">{currentPlan?.plan}</Badge>
               </div>
             </div>
 

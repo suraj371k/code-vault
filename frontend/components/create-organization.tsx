@@ -32,10 +32,12 @@ export default function CreateOrganizationDialog({
     mutate(data, {
       onSuccess: () => {
         toast.success("Organization created successfully!");
-        onOpenChange(false); 
+        onOpenChange(false);
       },
-      onError: (err) => {
-        toast.error(err?.message ?? "Failed to create organization");
+      onError: (err: any) => {
+        toast.error(
+          err?.response?.data?.message || "Failed to create organization",
+        );
       },
     });
   };
@@ -151,7 +153,7 @@ export default function CreateOrganizationDialog({
                   >
                     app.acme.com/
                   </span>
-               
+
                   <input
                     id="org-slug"
                     type="text"
@@ -190,7 +192,7 @@ export default function CreateOrganizationDialog({
                 >
                   Cancel
                 </Button>
-              
+
                 <Button
                   type="submit"
                   disabled={isPending}

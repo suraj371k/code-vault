@@ -8,6 +8,7 @@ import {
   getMyOrganizations,
   getOrganizationBySlug,
   removeMember,
+  getOnlineStatus,
 } from "../controllers/organization.controller.js";
 
 console.log("[debug] loaded organization.routes");
@@ -25,6 +26,9 @@ router.post("/:organizationId/member", authMiddleware, addMembers);
 
 // get members of the organization
 router.get("/:organizationId/member", authMiddleware, getMembers);
+
+// get online status of organization members
+router.get("/:organizationId/online-status", authMiddleware, getOnlineStatus);
 
 // get organization detail
 router.get("/:slug", authMiddleware, getOrganizationBySlug);

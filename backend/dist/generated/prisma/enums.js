@@ -53,3 +53,8 @@ export const Language = {
     SOLIDITY: 'SOLIDITY',
     VIM: 'VIM'
 };
+export const Plan = {
+    FREE: 'FREE',
+    PRO: 'PRO',
+    ENTERPRISE: 'ENTERPRISE'
+};
