@@ -22,7 +22,6 @@ const PLANS = {
 // Helper to safely get expiry date from subscription
 const getExpiryDate = (subscription: Stripe.Subscription): Date | null => {
   try {
-    // Try direct field first
     const end =
       (subscription as any).current_period_end ??
       subscription.items?.data?.[0]?.current_period_end;
@@ -38,6 +37,31 @@ const getExpiryDate = (subscription: Stripe.Subscription): Date | null => {
   }
 };
 
+// Helper to handle invoice payment renewal logic (used by both v1 and v2 events)
+const handleInvoiceRenewal = async (subscriptionId: string) => {
+  if (!subscriptionId) return;
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const userId = Number(subscription.metadata.userId);
+
+  if (!userId || isNaN(userId)) {
+    console.log("Skipping renewal — no userId in metadata");
+    return;
+  }
+
+  const expiryDate = getExpiryDate(subscription);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      subscriptionStatus: "active",
+      ...(expiryDate && { planExpiresAt: expiryDate }),
+    },
+  });
+
+  console.log(`✅ Renewal successful for user ${userId}`);
+};
+
 // Create Checkout Session
 export const createPayment = async (req: Request, res: Response) => {
   try {
@@ -51,9 +75,7 @@ export const createPayment = async (req: Request, res: Response) => {
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
@@ -104,7 +126,8 @@ export const handleWebHook = async (req: Request, res: Response) => {
 
   try {
     switch (event.type) {
-      //  User subscribed — save to DB
+
+      // ✅ User subscribed — save to DB
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = Number(session.client_reference_id);
@@ -116,8 +139,7 @@ export const handleWebHook = async (req: Request, res: Response) => {
           break;
         }
 
-        const subscription =
-          await stripe.subscriptions.retrieve(subscriptionId);
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
         const plan = subscription.metadata.plan as keyof typeof PLANS;
         const planEnum = PLANS[plan]?.planEnum ?? "PRO";
         const expiryDate = getExpiryDate(subscription);
@@ -137,53 +159,44 @@ export const handleWebHook = async (req: Request, res: Response) => {
             stripeCustomerId: customerId,
             subscriptionId: subscriptionId,
             subscriptionStatus: "active",
-            ...(expiryDate && { planExpiresAt: expiryDate }), // only set if valid
-          },
-        });
-
-        console.log(` User ${userId} subscribed to ${plan}`);
-        break;
-      }
-
-      //  Monthly renewal
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
-        const subscriptionId = invoice.subscription as string;
-
-        if (!subscriptionId) break;
-
-        const subscription =
-          await stripe.subscriptions.retrieve(subscriptionId);
-        const userId = Number(subscription.metadata.userId);
-
-        if (!userId || isNaN(userId)) {
-          console.log("Skipping renewal — no userId in metadata yet");
-          break;
-        }
-
-        const expiryDate = getExpiryDate(subscription);
-
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            subscriptionStatus: "active",
             ...(expiryDate && { planExpiresAt: expiryDate }),
           },
         });
 
-        console.log(`✅ Renewal successful for user ${userId}`);
+        console.log(`✅ User ${userId} subscribed to ${plan}`);
         break;
       }
 
-      //  Payment failed
+      // ✅ Monthly renewal — v1 snapshot event
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
+        await handleInvoiceRenewal(invoice.subscription as string);
+        break;
+      }
+
+      // ✅ Monthly renewal — v2 thin event (invoice_payment.paid)
+      // This is the newer Stripe API event format — handles the same renewal logic
+      case "invoice_payment.paid" as any: {
+        const invoicePayment = event.data.object as any;
+        // v2 thin event: get subscriptionId from invoice_payment object
+        const subscriptionId =
+          invoicePayment.subscription ?? invoicePayment.subscriptionId ?? null;
+        if (subscriptionId) {
+          await handleInvoiceRenewal(subscriptionId);
+        } else {
+          console.log("invoice_payment.paid — no subscriptionId found, skipping");
+        }
+        break;
+      }
+
+      // ❌ Payment failed — v1
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
         const subscriptionId = invoice.subscription as string;
 
         if (!subscriptionId) break;
 
-        const subscription =
-          await stripe.subscriptions.retrieve(subscriptionId);
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
         const userId = Number(subscription.metadata.userId);
 
         if (!userId || isNaN(userId)) break;
@@ -217,6 +230,9 @@ export const handleWebHook = async (req: Request, res: Response) => {
         console.log(`🚫 Subscription cancelled for user ${userId}`);
         break;
       }
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
     }
 
     res.json({ received: true });
@@ -240,9 +256,7 @@ export const getUserPlan = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     res.json({

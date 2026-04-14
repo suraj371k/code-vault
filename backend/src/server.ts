@@ -27,6 +27,7 @@ const app = express();
 const server = http.createServer(app);
 
 initSocket(server);
+
 //middlewares
 app.use(
   session({
@@ -36,11 +37,13 @@ app.use(
   }),
 );
 
+// ⚠️ Stripe webhook MUST come before express.json() — needs raw body
 app.post(
   "/stripe/webhook",
   express.raw({ type: "application/json" }),
   handleWebHook,
 );
+
 // passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
@@ -62,7 +65,6 @@ app.get(
   }),
   async (req: any, res) => {
     try {
-      // Get user ID from session
       const userId = req.session?.passport?.user;
       if (!userId) {
         return res.redirect(
@@ -70,7 +72,6 @@ app.get(
         );
       }
 
-      // Find the user
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -141,24 +142,18 @@ app.use("/api/payment", paymentRoutes);
 
 const port = process.env.PORT!;
 
-// const startServer = async () => {
-//   try {
-//     if (!redisClient.isOpen) {
-//       await redisClient.connect();
-//       console.log("Redis connected");
-//     }
-
-//     server.listen(port, () => {
-//       console.log("Server is running on port: ", port);
-//     });
-//   } catch (error) {
-//     console.error("Failed to start server:", error);
-//     process.exit(1);
-//   }
-// };
-
-// startServer();
-
 server.listen(port, () => {
   console.log("Server is running on port: ", port);
+
+  // Keep-alive ping every 14 minutes to prevent Render free tier cold start
+  // This stops Stripe webhooks from getting 404 due to server being spun down
+  const RENDER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
+  setInterval(async () => {
+    try {
+      await fetch(`${RENDER_URL}/`);
+      console.log("Keep-alive ping sent");
+    } catch (err) {
+      console.error("Keep-alive ping failed:", err);
+    }
+  }, 14 * 60 * 1000); // every 14 minutes
 });
