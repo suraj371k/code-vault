@@ -1,4 +1,6 @@
 import { prisma } from "../lib/prisma.js";
+import redisClient from "../lib/redis.js";
+import { invalidateNotifications } from "../lib/utils.js";
 export const getNotifications = async (req, res) => {
     try {
         const organizationId = Number(req.params.organizationId);
@@ -6,7 +8,7 @@ export const getNotifications = async (req, res) => {
         const organization = await prisma.organization.findFirst({
             where: {
                 id: organizationId,
-            }
+            },
         });
         if (!organization) {
             return res
@@ -16,14 +18,19 @@ export const getNotifications = async (req, res) => {
         const page = Math.max(1, Number(req.query.page) || 1);
         const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 8));
         let skip = (page - 1) * limit;
+        const cacheKey = `org:${organizationId}:notifications:${userId}:${page}:${limit}`;
+        const cacheData = await redisClient.get(cacheKey);
+        if (cacheData) {
+            return res.json(JSON.parse(cacheData));
+        }
         const [notifications, total] = await Promise.all([
             prisma.notification.findMany({
                 skip,
                 take: limit,
-                orderBy: { createdAt: 'desc' },
+                orderBy: { createdAt: "desc" },
                 where: {
                     organizationId,
-                    userId
+                    userId,
                 },
                 select: {
                     id: true,
@@ -36,28 +43,36 @@ export const getNotifications = async (req, res) => {
                             id: true,
                             name: true,
                             email: true,
-                        }
+                        },
                     },
-                }
+                },
             }),
             prisma.notification.count({
                 where: {
-                    organizationId
-                }
-            })
+                    organizationId,
+                    userId,
+                },
+            }),
         ]);
-        return res.status(200).json({
+        const responseData = {
             success: true,
             message: "notification fetched successfully",
             page,
             limit,
             total,
-            data: notifications
+            data: notifications,
+        };
+        // store in redis
+        await redisClient.set(cacheKey, JSON.stringify(responseData), {
+            EX: 60,
         });
+        return res.json(responseData);
     }
     catch (error) {
         console.error(`error in getting notifications: ${error}`);
-        return res.status(500).json({ success: false, message: "Internal server error" });
+        return res
+            .status(500)
+            .json({ success: false, message: "Internal server error" });
     }
 };
 export const deleteNotification = async (req, res) => {
@@ -82,14 +97,19 @@ export const deleteNotification = async (req, res) => {
             where: {
                 id: notificationId,
                 organizationId,
-                userId
-            }
+                userId,
+            },
         });
-        return res.status(200).json({ success: true, message: 'notification deleted successfully' });
+        await invalidateNotifications(organizationId);
+        return res
+            .status(200)
+            .json({ success: true, message: "notification deleted successfully" });
     }
     catch (error) {
         console.error(`error in deleting notification: ${error}`);
-        return res.status(500).json({ success: false, message: "Internal server error" });
+        return res
+            .status(500)
+            .json({ success: false, message: "Internal server error" });
     }
 };
 export const markRead = async (req, res) => {
@@ -109,11 +129,13 @@ export const markRead = async (req, res) => {
                 userId,
             },
             data: {
-                isRead: true
-            }
+                isRead: true,
+            },
         });
         if (result.count === 0) {
-            return res.status(404).json({ success: false, message: "notification not found" });
+            return res
+                .status(404)
+                .json({ success: false, message: "notification not found" });
         }
         const updatedNotification = await prisma.notification.findFirst({
             where: {
@@ -128,10 +150,17 @@ export const markRead = async (req, res) => {
                 organizationId: true,
             },
         });
-        return res.status(200).json({ success: true, message: "mark as read successfully", data: updatedNotification });
+        await invalidateNotifications(organizationId);
+        return res.status(200).json({
+            success: true,
+            message: "mark as read successfully",
+            data: updatedNotification,
+        });
     }
     catch (error) {
         console.error(`error in markRead controller: ${error}`);
-        return res.status(500).json({ success: false, message: "Internal server error" });
+        return res
+            .status(500)
+            .json({ success: false, message: "Internal server error" });
     }
 };

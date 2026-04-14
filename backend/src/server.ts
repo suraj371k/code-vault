@@ -8,6 +8,9 @@ import "./lib/passport.js";
 import session from "express-session";
 import jwt from "jsonwebtoken";
 import { prisma } from "./lib/prisma.js";
+import passport from "passport";
+import { authMiddleware } from "./middleware/auth.middleware.js";
+import { handleWebHook } from "./controllers/payment.controller.js";
 
 //routes imports
 import authRoutes from "./routes/auth.routes.js";
@@ -16,8 +19,7 @@ import organizationRoutes from "./routes/organization.routes.js";
 import messageRoutes from "./routes/message.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
-import passport from "passport";
-import redisClient from "./lib/redis.js";
+import paymentRoutes from "./routes/payment.routes.js";
 
 dotenv.config();
 
@@ -34,11 +36,16 @@ app.use(
   }),
 );
 
+app.post(
+  "/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  handleWebHook,
+);
 // passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.json());
-app.use(cors({ origin: "http://localhost:3000", credentials: true }));
+app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
 app.use(cookieParser());
 
 //health route
@@ -130,6 +137,7 @@ app.use("/api/organization", organizationRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/payment", paymentRoutes);
 
 const port = process.env.PORT!;
 

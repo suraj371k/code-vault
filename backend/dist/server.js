@@ -8,6 +8,8 @@ import "./lib/passport.js";
 import session from "express-session";
 import jwt from "jsonwebtoken";
 import { prisma } from "./lib/prisma.js";
+import passport from "passport";
+import { handleWebHook } from "./controllers/payment.controller.js";
 //routes imports
 import authRoutes from "./routes/auth.routes.js";
 import snippetRoutes from "./routes/snippets.routes.js";
@@ -15,7 +17,7 @@ import organizationRoutes from "./routes/organization.routes.js";
 import messageRoutes from "./routes/message.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
-import passport from "passport";
+import paymentRoutes from "./routes/payment.routes.js";
 dotenv.config();
 const app = express();
 const server = http.createServer(app);
@@ -26,6 +28,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
 }));
+app.post("/stripe/webhook", express.raw({ type: "application/json" }), handleWebHook);
 // passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
@@ -97,7 +100,23 @@ app.use("/api/organization", organizationRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/payment", paymentRoutes);
 const port = process.env.PORT;
+// const startServer = async () => {
+//   try {
+//     if (!redisClient.isOpen) {
+//       await redisClient.connect();
+//       console.log("Redis connected");
+//     }
+//     server.listen(port, () => {
+//       console.log("Server is running on port: ", port);
+//     });
+//   } catch (error) {
+//     console.error("Failed to start server:", error);
+//     process.exit(1);
+//   }
+// };
+// startServer();
 server.listen(port, () => {
     console.log("Server is running on port: ", port);
 });

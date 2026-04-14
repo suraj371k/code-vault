@@ -108,12 +108,8 @@ export const createMessage = async (req, res) => {
                 message: "Receiver not found",
             });
         }
-        // emit to receiver
         const io = getIO();
-        io.to(`user:${receiverId}`).emit("newMessage", {
-            message,
-            receiver,
-        });
+        io.to(`conversation:${conversation.id}`).emit("newMessage", message);
         return res.status(201).json({
             success: true,
             data: {
@@ -405,9 +401,7 @@ export const removeMemberFromGroup = async (req, res) => {
         if (!Number.isFinite(groupId) ||
             !Number.isFinite(organizationId) ||
             !Number.isFinite(memberUserId)) {
-            return res
-                .status(400)
-                .json({
+            return res.status(400).json({
                 success: false,
                 message: "Invalid group, organization, or member id",
             });

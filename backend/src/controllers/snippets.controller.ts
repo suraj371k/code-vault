@@ -9,6 +9,7 @@ import {
   invalidateSnippets,
   toLanguage,
 } from "../lib/utils.js";
+import { PLAN_LIMITS } from "../config/planLimits.js";
 
 // helpers
 
@@ -62,6 +63,38 @@ export const createSnippets = async (req: Request, res: Response) => {
       parsedLanguage ?? null,
       code,
     );
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        plan: true,
+      },
+    });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "user not found" });
+    }
+
+    const limit = PLAN_LIMITS[user.plan].snippetsPerOrg;
+
+    if (limit !== Infinity) {
+      const snippetCount = await prisma.snippet.count({
+        where: { organizationId },
+      });
+
+      if (snippetCount >= limit) {
+        return res.status(403).json({
+          success: false,
+          message: `Your ${user.plan} plan allows only ${limit} snippets per organization. Upgrade to add more.`,
+          currentCount: snippetCount,
+          limit,
+        });
+      }
+    }
 
     const snippet = await prisma.snippet.create({
       data: {

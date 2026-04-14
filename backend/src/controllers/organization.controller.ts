@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { invalidateNotifications } from "../lib/utils.js";
+import { PLAN_LIMITS } from "../config/planLimits.js";
 
 export const generateSlug = (name: string): string => {
   return name
@@ -52,6 +53,35 @@ export const createOrganization = async (req: Request, res: Response) => {
       });
     }
     const slug = await generateUniqueSlug(name.trim());
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        plan: true,
+        memberships: { select: { id: true } },
+      },
+    });
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "user not found" });
+    }
+
+    // check organization limit
+    const limit = PLAN_LIMITS[user.plan].organizations;
+    const currentCount = user.memberships.length;
+
+    if (currentCount >= limit) {
+      return res.status(403).json({
+        success: false,
+        message: `Your ${user.plan} plan allows only ${limit} organization${limit === 1 ? "" : "s"}. Upgrade to create more.`,
+        currentCount,
+        limit,
+      });
+    }
 
     const organization = await prisma.organization.create({
       data: {
@@ -127,6 +157,23 @@ export const addMembers = async (req: Request, res: Response) => {
         success: false,
         message: "User already in organization",
       });
+    }
+
+    const limit = PLAN_LIMITS[user.plan].membersPerOrg;
+
+    if (limit !== Infinity) {
+      const memberCount = await prisma.membership.count({
+        where: { organizationId },
+      });
+
+      if (memberCount >= limit) {
+        return res.status(403).json({
+          success: false,
+          message: `Your ${user.plan} plan allows only ${limit} members per organization. Upgrade to add more.`,
+          currentCount: memberCount,
+          limit,
+        });
+      }
     }
 
     const membership = await prisma.membership.create({
@@ -398,6 +445,59 @@ export const removeMember = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(`error in removing member: ${error}`);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+// get online status of organization members
+export const getOnlineStatus = async (req: Request, res: Response) => {
+  try {
+    const organizationId = Number(req.params.organizationId);
+    const userId = (req as any).user.userId;
+
+    if (!organizationId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid organization id",
+      });
+    }
+
+    // Verify user is in organization
+    const membership = await prisma.membership.findFirst({
+      where: { userId, organizationId },
+    });
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        message: "Not a member of this organization",
+      });
+    }
+
+    // Get all members with their online status
+    const members = await prisma.user.findMany({
+      where: {
+        memberships: {
+          some: { organizationId },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isOnline: true,
+        lastSeenAt: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: members,
+    });
+  } catch (error) {
+    console.error(`error in getting online status: ${error}`);
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });

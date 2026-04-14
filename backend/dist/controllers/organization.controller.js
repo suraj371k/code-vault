@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { invalidateNotifications } from "../lib/utils.js";
 export const generateSlug = (name) => {
     return name
         .trim()
@@ -118,22 +119,23 @@ export const addMembers = async (req, res) => {
         });
         const members = await prisma.membership.findMany({
             where: {
-                organizationId
+                organizationId,
             },
             select: {
-                userId: true
-            }
+                userId: true,
+            },
         });
         await prisma.notification.createMany({
             data: members
-                .filter(member => member.userId !== userId && member.userId !== user.id)
-                .map(member => ({
+                .filter((member) => member.userId !== userId && member.userId !== user.id)
+                .map((member) => ({
                 userId: member.userId,
                 organizationId,
-                type: 'NEW_MEMBER',
+                type: "NEW_MEMBER",
                 message: `${user.name} joined the organization`,
             })),
         });
+        await invalidateNotifications(organizationId);
         return res.status(201).json({
             success: true,
             message: "User added to organization",
@@ -166,11 +168,13 @@ export const getMembers = async (req, res) => {
                         name: true,
                         email: true,
                         createdAt: true,
-                    }
-                }
+                    },
+                },
             },
         });
-        const totalMembers = await prisma.membership.count({ where: { organizationId } });
+        const totalMembers = await prisma.membership.count({
+            where: { organizationId },
+        });
         return res.status(200).json({
             success: true,
             message: "members fetched successfully",
@@ -347,6 +351,54 @@ export const removeMember = async (req, res) => {
     }
     catch (error) {
         console.error(`error in removing member: ${error}`);
+        return res
+            .status(500)
+            .json({ success: false, message: "Internal server error" });
+    }
+};
+// get online status of organization members
+export const getOnlineStatus = async (req, res) => {
+    try {
+        const organizationId = Number(req.params.organizationId);
+        const userId = req.user.userId;
+        if (!organizationId) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid organization id",
+            });
+        }
+        // Verify user is in organization
+        const membership = await prisma.membership.findFirst({
+            where: { userId, organizationId },
+        });
+        if (!membership) {
+            return res.status(403).json({
+                success: false,
+                message: "Not a member of this organization",
+            });
+        }
+        // Get all members with their online status
+        const members = await prisma.user.findMany({
+            where: {
+                memberships: {
+                    some: { organizationId },
+                },
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                isOnline: true,
+                lastSeenAt: true,
+            },
+        });
+        return res.status(200).json({
+            success: true,
+            data: members,
+        });
+    }
+    catch (error) {
+        console.error(`error in getting online status: ${error}`);
         return res
             .status(500)
             .json({ success: false, message: "Internal server error" });

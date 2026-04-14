@@ -1,6 +1,10 @@
 import { ChatGoogle } from "@langchain/google";
 const llm = new ChatGoogle({
     apiKey: process.env.GEMINI_API_KEY,
+    model: "gemini-2.5-flash-lite",
+});
+const llm2 = new ChatGoogle({
+    apiKey: process.env.GEMINI_API_KEY,
     model: "gemini-2.5-flash",
 });
 export async function generateSummary(language, code) {
@@ -20,15 +24,41 @@ Language: ${langLabel}
 Code:
 ${code}
 
-Return ONLY a valid JSON object, no markdown, no explanation:
+Return ONLY a valid JSON object, no markdown, no explanation , do not say generating a summary for developer etc just return summary and tags:
 {
   "summary": ["summary1", "summary2"],
   "tags": ["tag1", "tag2"]
 }
 `;
-    const response = await llm.invoke(prompt);
-    const text = response.content;
+    let text = "";
+    try {
+        //  First attempt
+        const response = await llm2.invoke(prompt);
+        text = extractText(response.content);
+    }
+    catch (err) {
+        console.log(" Primary model failed, switching...");
+        //  Fallback attempt
+        const response = await llm.invoke(prompt);
+        text = extractText(response.content);
+    }
     const clean = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
-    return parsed;
+    try {
+        return JSON.parse(clean);
+    }
+    catch (err) {
+        console.error("❌ JSON parse failed:", clean);
+        return {
+            summary: ["Failed to parse response"],
+            tags: [],
+        };
+    }
+}
+function extractText(content) {
+    if (typeof content === "string")
+        return content;
+    if (Array.isArray(content)) {
+        return content.map((c) => c.text || "").join("");
+    }
+    return "";
 }

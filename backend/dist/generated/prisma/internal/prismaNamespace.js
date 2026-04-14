@@ -94,7 +94,14 @@ export const UserScalarFieldEnum = {
     password: 'password',
     name: 'name',
     googleId: 'googleId',
-    createdAt: 'createdAt'
+    isOnline: 'isOnline',
+    plan: 'plan',
+    lastSeenAt: 'lastSeenAt',
+    createdAt: 'createdAt',
+    stripeCustomerId: 'stripeCustomerId',
+    subscriptionId: 'subscriptionId',
+    subscriptionStatus: 'subscriptionStatus',
+    planExpiresAt: 'planExpiresAt'
 };
 export const OrganizationScalarFieldEnum = {
     id: 'id',
