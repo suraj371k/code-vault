@@ -103,7 +103,7 @@ Deployed using Docker containers on Render with CI/CD via GitHub Actions.
 1. When new user or snippt will create user inside organization get notification in real time
 2. added redis caching for notifications
 
-##Payment Integration
+## Payment Integration
 1. Uses stripe for payment integration
 2. monthly and yearly plans are avaialable
 
