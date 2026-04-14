@@ -37,7 +37,7 @@ app.use(
   }),
 );
 
-// ⚠️ Stripe webhook MUST come before express.json() — needs raw body
+//  Stripe webhook MUST come before express.json() — needs raw body
 app.post(
   "/stripe/webhook",
   express.raw({ type: "application/json" }),
@@ -143,17 +143,5 @@ app.use("/api/payment", paymentRoutes);
 const port = process.env.PORT!;
 
 server.listen(port, () => {
-  console.log("Server is running on port: ", port);
-
-  // Keep-alive ping every 14 minutes to prevent Render free tier cold start
-  // This stops Stripe webhooks from getting 404 due to server being spun down
-  const RENDER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-  setInterval(async () => {
-    try {
-      await fetch(`${RENDER_URL}/`);
-      console.log("Keep-alive ping sent");
-    } catch (err) {
-      console.error("Keep-alive ping failed:", err);
-    }
-  }, 14 * 60 * 1000); // every 14 minutes
+  console.log(`server is running on ${port}`);
 });
