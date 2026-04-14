@@ -48,7 +48,7 @@ app.post(
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.json());
-app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+app.use(cors({ origin: process.env.CORS_ORIGIN!, credentials: true }));
 app.use(cookieParser());
 
 //health route
@@ -56,7 +56,6 @@ app.get("/", (req, res) => {
   res.send("successfully running");
 });
 
-// Google OAuth callback route (matches Google Cloud Console redirect URI)
 app.get(
   "/oauth2/redirect/google",
   passport.authenticate("google", {
