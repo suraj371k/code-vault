@@ -110,8 +110,8 @@ const CreateSnippetForm = ({
           });
           onOpenChange(false);
         },
-        onError: () => {
-          toast.error("Failed to save snippet. Please try again.");
+        onError: (err: any) => {
+          toast.error(err?.response?.data?.message || "something went wrong");
         },
       },
     );

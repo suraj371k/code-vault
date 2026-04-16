@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import Stripe from "stripe";
+import { PLAN_LIMITS } from "../config/planLimits.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -54,7 +55,7 @@ const handleInvoiceRenewal = async (subscriptionId: string) => {
   await prisma.organization.update({
     where: { id: orgId },
     data: {
-      subscriptionStatus: "active",
+      subscriptionStatus: "ACTIVE",
       ...(expiryDate && { planExpiresAt: expiryDate }),
     },
   });
@@ -156,7 +157,7 @@ export const handleWebHook = async (req: Request, res: Response) => {
             plan: planEnum,
             stripeCustomerId: customerId,
             subscriptionId: subscriptionId,
-            subscriptionStatus: "active",
+            subscriptionStatus: "ACTIVE",
             ...(expiryDate && { planExpiresAt: expiryDate }),
           },
         });
@@ -206,7 +207,7 @@ export const handleWebHook = async (req: Request, res: Response) => {
 
         await prisma.organization.update({
           where: { id: orgId },
-          data: { subscriptionStatus: "past_due" },
+          data: { subscriptionStatus: "PAST_DUE" },
         });
         break;
       }
@@ -223,7 +224,7 @@ export const handleWebHook = async (req: Request, res: Response) => {
           data: {
             plan: "FREE",
             subscriptionId: null,
-            subscriptionStatus: "canceled",
+            subscriptionStatus: "CANCELED",
             planExpiresAt: null,
           },
         });
@@ -242,7 +243,7 @@ export const handleWebHook = async (req: Request, res: Response) => {
   }
 };
 
-export const getUserPlan = async (req: Request, res: Response) => {
+export const getOrganizationPlan = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.userId;
 
@@ -262,36 +263,57 @@ export const getUserPlan = async (req: Request, res: Response) => {
           organization: true,
         },
       });
+
+      if (!membership) {
+        return res.status(403).json({
+          success: false,
+          message: "You don't have access to this organization",
+        });
+      }
     } else {
       membership = await prisma.membership.findFirst({
-        where: { userId },
+        where: {
+          userId,
+          role: "OWNER",
+        },
         include: {
           organization: true,
         },
+        orderBy: {
+          organization: {
+            createdAt: "desc",
+          },
+        },
       });
-    }
 
-    if (!membership || !membership.organization) {
-      return res.status(404).json({
-        success: false,
-        message: "Organization not found for user",
-      });
+      if (!membership) {
+        return res.status(400).json({
+          success: false,
+          message: "No organization found. Please specify organization ID.",
+        });
+      }
     }
 
     const org = membership.organization;
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      plan: org.plan,
-      status: org.subscriptionStatus,
-      expiresAt: org.planExpiresAt,
-      isActive: org.subscriptionStatus === "active",
-      organizationId: org.id,
+      data: {
+        plan: org.plan,
+        status: org.subscriptionStatus,
+        expiresAt: org.planExpiresAt,
+        isActive: org.subscriptionStatus === "ACTIVE",
+        isTrialing: org.subscriptionStatus === "TRIALING",
+        isCanceled: org.subscriptionStatus === "CANCELED",
+        isPastDue: org.subscriptionStatus === "PAST_DUE",
+        organizationId: org.id,
+        organizationName: org.name,
+        limits: PLAN_LIMITS[org.plan],
+      },
     });
   } catch (error) {
-    console.error("Error fetching user plan:", error);
-
-    res.status(500).json({
+    console.error("Error fetching organization plan:", error);
+    return res.status(500).json({
       success: false,
       message: "Internal server error",
     });

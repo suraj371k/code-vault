@@ -67,19 +67,19 @@ export const UserScalarFieldEnum = {
     name: 'name',
     googleId: 'googleId',
     isOnline: 'isOnline',
-    plan: 'plan',
     lastSeenAt: 'lastSeenAt',
-    createdAt: 'createdAt',
-    stripeCustomerId: 'stripeCustomerId',
-    subscriptionId: 'subscriptionId',
-    subscriptionStatus: 'subscriptionStatus',
-    planExpiresAt: 'planExpiresAt'
+    createdAt: 'createdAt'
 };
 export const OrganizationScalarFieldEnum = {
     id: 'id',
     name: 'name',
     createdAt: 'createdAt',
-    slug: 'slug'
+    slug: 'slug',
+    plan: 'plan',
+    stripeCustomerId: 'stripeCustomerId',
+    subscriptionId: 'subscriptionId',
+    subscriptionStatus: 'subscriptionStatus',
+    planExpiresAt: 'planExpiresAt'
 };
 export const MembershipScalarFieldEnum = {
     id: 'id',

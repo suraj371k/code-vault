@@ -1,4 +1,4 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { generateSummary } from "../services/generate-summary.js";
 import { Language } from "../generated/prisma/enums.js";
@@ -10,8 +10,6 @@ import {
   toLanguage,
 } from "../lib/utils.js";
 import { PLAN_LIMITS } from "../config/planLimits.js";
-
-// helpers
 
 // controllers
 
@@ -31,6 +29,15 @@ export const createSnippets = async (req: Request, res: Response) => {
         .status(404)
         .json({ success: false, message: "user not found" });
     }
+
+    const organization = await prisma.organization.findUnique({
+      where: {
+        id: organizationId,
+      },
+      select: {
+        plan: true,
+      },
+    });
 
     const membership = await prisma.membership.findFirst({
       where: { userId, organizationId },
@@ -64,22 +71,13 @@ export const createSnippets = async (req: Request, res: Response) => {
       code,
     );
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-      select: {
-        plan: true,
-      },
-    });
-
-    if (!user) {
+    if (!organization) {
       return res
         .status(404)
         .json({ success: false, message: "user not found" });
     }
 
-    const limit = PLAN_LIMITS[user.plan].snippetsPerOrg;
+    const limit = PLAN_LIMITS[organization.plan].snippetsPerOrg;
 
     if (limit !== Infinity) {
       const snippetCount = await prisma.snippet.count({
@@ -89,7 +87,7 @@ export const createSnippets = async (req: Request, res: Response) => {
       if (snippetCount >= limit) {
         return res.status(403).json({
           success: false,
-          message: `Your ${user.plan} plan allows only ${limit} snippets per organization. Upgrade to add more.`,
+          message: `Your ${organization.plan} plan allows only ${limit} snippets per organization. Upgrade to add more.`,
           currentCount: snippetCount,
           limit,
         });
@@ -110,9 +108,6 @@ export const createSnippets = async (req: Request, res: Response) => {
       },
     });
 
-    // invalidate cache after snippet is created
-    await invalidateSnippets(organizationId);
-
     const io = getIO();
 
     // for snippet real time update
@@ -124,6 +119,9 @@ export const createSnippets = async (req: Request, res: Response) => {
       where: { organizationId },
       select: { userId: true },
     });
+
+    // invalidate cache after snippet is created
+    await invalidateSnippets(organizationId);
 
     await prisma.notification.createMany({
       data: members

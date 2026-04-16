@@ -28,29 +28,27 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
 }));
+//  Stripe webhook MUST come before express.json() — needs raw body
 app.post("/stripe/webhook", express.raw({ type: "application/json" }), handleWebHook);
 // passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.json());
-app.use(cors({ origin: "http://localhost:3000", credentials: true }));
+app.use(cors({ origin: "https://code-vault-alpha-nine.vercel.app", credentials: true }));
 app.use(cookieParser());
 //health route
 app.get("/", (req, res) => {
     res.send("successfully running");
 });
-// Google OAuth callback route (matches Google Cloud Console redirect URI)
 app.get("/oauth2/redirect/google", passport.authenticate("google", {
     failureRedirect: "/login",
     session: true,
 }), async (req, res) => {
     try {
-        // Get user ID from session
         const userId = req.session?.passport?.user;
         if (!userId) {
             return res.redirect(`${process.env.CORS_ORIGIN}/login?error=authentication_failed`);
         }
-        // Find the user
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: {
@@ -102,21 +100,6 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/payment", paymentRoutes);
 const port = process.env.PORT;
-// const startServer = async () => {
-//   try {
-//     if (!redisClient.isOpen) {
-//       await redisClient.connect();
-//       console.log("Redis connected");
-//     }
-//     server.listen(port, () => {
-//       console.log("Server is running on port: ", port);
-//     });
-//   } catch (error) {
-//     console.error("Failed to start server:", error);
-//     process.exit(1);
-//   }
-// };
-// startServer();
 server.listen(port, () => {
-    console.log("Server is running on port: ", port);
+    console.log(`server is running on ${port}`);
 });

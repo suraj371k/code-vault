@@ -18,7 +18,6 @@ const PLANS = {
 // Helper to safely get expiry date from subscription
 const getExpiryDate = (subscription) => {
     try {
-        // Try direct field first
         const end = subscription.current_period_end ??
             subscription.items?.data?.[0]?.current_period_end;
         if (!end || isNaN(Number(end)))
@@ -32,36 +31,59 @@ const getExpiryDate = (subscription) => {
         return null;
     }
 };
+// Helper to handle invoice payment renewal logic
+const handleInvoiceRenewal = async (subscriptionId) => {
+    if (!subscriptionId)
+        return;
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const orgId = Number(subscription.metadata.organizationId);
+    if (!orgId || isNaN(orgId)) {
+        console.log("Skipping renewal — no orgId in metadata");
+        return;
+    }
+    const expiryDate = getExpiryDate(subscription);
+    await prisma.organization.update({
+        where: { id: orgId },
+        data: {
+            subscriptionStatus: "active",
+            ...(expiryDate && { planExpiresAt: expiryDate }),
+        },
+    });
+    console.log(` Renewal successful for organization ${orgId}`);
+};
 // Create Checkout Session
 export const createPayment = async (req, res) => {
     try {
-        const userId = req.user.userId;
-        const { plan } = req.body;
+        const { plan, organizationId } = req.body;
         const selectedPlan = PLANS[plan];
         if (!selectedPlan) {
             return res.status(400).json({ success: false, message: "Invalid plan" });
         }
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) {
+        const org = await prisma.organization.findUnique({
+            where: {
+                id: organizationId,
+            },
+        });
+        if (!org) {
             return res
                 .status(404)
                 .json({ success: false, message: "User not found" });
         }
         const sessionParams = {
             mode: "subscription",
-            client_reference_id: String(userId),
+            client_reference_id: String(organizationId),
             line_items: [{ price: selectedPlan.priceId, quantity: 1 }],
             subscription_data: {
-                metadata: { userId: String(userId), plan },
+                metadata: { organizationId: String(organizationId), plan },
             },
             success_url: `${process.env.CORS_ORIGIN}/success`,
             cancel_url: `${process.env.CORS_ORIGIN}/pricing`,
         };
-        if (user.stripeCustomerId) {
-            sessionParams.customer = user.stripeCustomerId;
+        if (org.stripeCustomerId) {
+            sessionParams.customer = org.stripeCustomerId;
         }
         else {
-            sessionParams.customer_email = user.email;
+            sessionParams.customer_email = req.user.email;
         }
         const session = await stripe.checkout.sessions.create(sessionParams);
         res.json({ success: true, url: session.url });
@@ -87,13 +109,13 @@ export const handleWebHook = async (req, res) => {
     }
     try {
         switch (event.type) {
-            //  User subscribed — save to DB
+            //  User subscribed
             case "checkout.session.completed": {
                 const session = event.data.object;
-                const userId = Number(session.client_reference_id);
+                const organizationId = Number(session.client_reference_id);
                 const subscriptionId = session.subscription;
                 const customerId = session.customer;
-                if (!userId || isNaN(userId)) {
+                if (!organizationId || isNaN(organizationId)) {
                     console.log("Skipping — invalid userId");
                     break;
                 }
@@ -101,74 +123,62 @@ export const handleWebHook = async (req, res) => {
                 const plan = subscription.metadata.plan;
                 const planEnum = PLANS[plan]?.planEnum ?? "PRO";
                 const expiryDate = getExpiryDate(subscription);
-                console.log("subscription data:", {
-                    userId,
-                    plan,
-                    planEnum,
-                    expiryDate,
-                    current_period_end: subscription.current_period_end,
-                });
-                await prisma.user.update({
-                    where: { id: userId },
+                await prisma.organization.update({
+                    where: { id: organizationId },
                     data: {
                         plan: planEnum,
                         stripeCustomerId: customerId,
                         subscriptionId: subscriptionId,
                         subscriptionStatus: "active",
-                        ...(expiryDate && { planExpiresAt: expiryDate }), // only set if valid
-                    },
-                });
-                console.log(` User ${userId} subscribed to ${plan}`);
-                break;
-            }
-            //  Monthly renewal
-            case "invoice.payment_succeeded": {
-                const invoice = event.data.object;
-                const subscriptionId = invoice.subscription;
-                if (!subscriptionId)
-                    break;
-                const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-                const userId = Number(subscription.metadata.userId);
-                if (!userId || isNaN(userId)) {
-                    console.log("Skipping renewal — no userId in metadata yet");
-                    break;
-                }
-                const expiryDate = getExpiryDate(subscription);
-                await prisma.user.update({
-                    where: { id: userId },
-                    data: {
-                        subscriptionStatus: "active",
                         ...(expiryDate && { planExpiresAt: expiryDate }),
                     },
                 });
-                console.log(`✅ Renewal successful for user ${userId}`);
                 break;
             }
-            //  Payment failed
+            //  Monthly renewal — v1 snapshot event
+            case "invoice.payment_succeeded": {
+                const invoice = event.data.object;
+                await handleInvoiceRenewal(invoice.subscription);
+                break;
+            }
+            //  Monthly renewal — v2 thin event (invoice_payment.paid)
+            // This is the newer Stripe API event format — handles the same renewal logic
+            case "invoice_payment.paid": {
+                const invoicePayment = event.data.object;
+                // v2 thin event: get subscriptionId from invoice_payment object
+                const subscriptionId = invoicePayment.subscription ?? invoicePayment.subscriptionId ?? null;
+                if (subscriptionId) {
+                    await handleInvoiceRenewal(subscriptionId);
+                }
+                else {
+                    console.log("invoice_payment.paid — no subscriptionId found, skipping");
+                }
+                break;
+            }
+            //  Payment failed — v1
             case "invoice.payment_failed": {
                 const invoice = event.data.object;
                 const subscriptionId = invoice.subscription;
                 if (!subscriptionId)
                     break;
                 const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-                const userId = Number(subscription.metadata.userId);
-                if (!userId || isNaN(userId))
+                const orgId = Number(subscription.metadata.organizationId);
+                if (!orgId || isNaN(orgId))
                     break;
-                await prisma.user.update({
-                    where: { id: userId },
+                await prisma.organization.update({
+                    where: { id: orgId },
                     data: { subscriptionStatus: "past_due" },
                 });
-                console.log(`❌ Payment failed for user ${userId}`);
                 break;
             }
-            // 🚫 Subscription cancelled
+            //  Subscription cancelled
             case "customer.subscription.deleted": {
                 const subscription = event.data.object;
-                const userId = Number(subscription.metadata.userId);
-                if (!userId || isNaN(userId))
+                const orgId = Number(subscription.metadata.organizationId);
+                if (!orgId || isNaN(orgId))
                     break;
-                await prisma.user.update({
-                    where: { id: userId },
+                await prisma.organization.update({
+                    where: { id: orgId },
                     data: {
                         plan: "FREE",
                         subscriptionId: null,
@@ -176,9 +186,10 @@ export const handleWebHook = async (req, res) => {
                         planExpiresAt: null,
                     },
                 });
-                console.log(`🚫 Subscription cancelled for user ${userId}`);
                 break;
             }
+            default:
+                console.log(`Unhandled event type: ${event.type}`);
         }
         res.json({ received: true });
     }
@@ -190,28 +201,49 @@ export const handleWebHook = async (req, res) => {
 export const getUserPlan = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: {
-                plan: true,
-                subscriptionStatus: true,
-                planExpiresAt: true,
-            },
-        });
-        if (!user) {
-            return res
-                .status(404)
-                .json({ success: false, message: "User not found" });
+        const organizationId = Number(req.headers["x-organization-id"]) ||
+            Number(req.query.organizationId);
+        let membership;
+        if (organizationId && !isNaN(organizationId)) {
+            membership = await prisma.membership.findFirst({
+                where: {
+                    userId,
+                    organizationId,
+                },
+                include: {
+                    organization: true,
+                },
+            });
         }
+        else {
+            membership = await prisma.membership.findFirst({
+                where: { userId },
+                include: {
+                    organization: true,
+                },
+            });
+        }
+        if (!membership || !membership.organization) {
+            return res.status(404).json({
+                success: false,
+                message: "Organization not found for user",
+            });
+        }
+        const org = membership.organization;
         res.json({
             success: true,
-            plan: user.plan,
-            status: user.subscriptionStatus,
-            expiresAt: user.planExpiresAt,
-            isActive: user.subscriptionStatus === "active",
+            plan: org.plan,
+            status: org.subscriptionStatus,
+            expiresAt: org.planExpiresAt,
+            isActive: org.subscriptionStatus === "active",
+            organizationId: org.id,
         });
     }
     catch (error) {
-        res.status(500).json({ success: false, message: "Internal server error" });
+        console.error("Error fetching user plan:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
     }
 };

@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { invalidateNotifications } from "../lib/utils.js";
+import { PLAN_LIMITS } from "../config/planLimits.js";
 export const generateSlug = (name) => {
     return name
         .trim()
@@ -42,6 +43,31 @@ export const createOrganization = async (req, res) => {
             });
         }
         const slug = await generateUniqueSlug(name.trim());
+        const user = await prisma.user.findUnique({
+            where: {
+                id: userId,
+            },
+            select: {
+                plan: true,
+                memberships: { select: { id: true } },
+            },
+        });
+        if (!user) {
+            return res
+                .status(404)
+                .json({ success: false, message: "user not found" });
+        }
+        // check organization limit
+        const limit = PLAN_LIMITS[user.plan].organizations;
+        const currentCount = user.memberships.length;
+        if (currentCount >= limit) {
+            return res.status(403).json({
+                success: false,
+                message: `Your ${user.plan} plan allows only ${limit} organization${limit === 1 ? "" : "s"}. Upgrade to create more.`,
+                currentCount,
+                limit,
+            });
+        }
         const organization = await prisma.organization.create({
             data: {
                 name,
@@ -109,6 +135,20 @@ export const addMembers = async (req, res) => {
                 success: false,
                 message: "User already in organization",
             });
+        }
+        const limit = PLAN_LIMITS[user.plan].membersPerOrg;
+        if (limit !== Infinity) {
+            const memberCount = await prisma.membership.count({
+                where: { organizationId },
+            });
+            if (memberCount >= limit) {
+                return res.status(403).json({
+                    success: false,
+                    message: `Your ${user.plan} plan allows only ${limit} members per organization. Upgrade to add more.`,
+                    currentCount: memberCount,
+                    limit,
+                });
+            }
         }
         const membership = await prisma.membership.create({
             data: {

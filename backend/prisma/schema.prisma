@@ -76,6 +76,13 @@ enum Plan {
   ENTERPRISE
 }
 
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+}
+
 model User {
   id         Int      @id @default(autoincrement())
   email      String   @unique
@@ -95,6 +102,8 @@ model User {
 
   messages            Message[]
   conversationMembers ConversationMember[]
+
+  organizations Organization[]
 }
 
 model Organization {
@@ -107,17 +116,22 @@ model Organization {
   groups      Group[]
   collections Collection[]
 
-  plan               Plan      @default(FREE)
-  stripeCustomerId   String?   @unique
-  subscriptionId     String?   @unique
-  subscriptionStatus String? // active, canceled, past_due
+  plan               Plan               @default(FREE)
+  stripeCustomerId   String?            @unique
+  subscriptionId     String?            @unique
   planExpiresAt      DateTime?
+  subscriptionStatus SubscriptionStatus @default(TRIALING)
+
+  billingOwnerId Int?
+  billingOwner   User? @relation(fields: [billingOwnerId], references: [id])
 
   messages Message[]
 
   notifications Notification[]
 
   conversations Conversation[]
+
+  subscriptions Subscription[]
 }
 
 model Membership {
@@ -253,6 +267,23 @@ model Notification {
 
   groupId Int?
   group   Group? @relation(fields: [groupId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model Subscription {
+  id Int @id @default(autoincrement())
+
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  plan   Plan
+  status SubscriptionStatus
+
+  stripeSubscriptionId String?
+
+  startDate DateTime
+  endDate   DateTime?
 
   createdAt DateTime @default(now())
 }
