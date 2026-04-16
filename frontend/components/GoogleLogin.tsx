@@ -9,8 +9,8 @@ import { useRouter } from "next/navigation";
 const GoogleLogin = () => {
   const router = useRouter();
 
-  const handleGoogleLogin = () => {
-    window.location.href = "http://localhost:5001/api/auth/google";
+   const handleGoogleLogin = () => {
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`;
   };
 
   return (
