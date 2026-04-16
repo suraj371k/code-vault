@@ -63,31 +63,24 @@ passport.use(
   ),
 );
 
-// serialize user for session
+// since we use JWT we only need serializeUser minimally
 passport.serializeUser((user: any, done) => {
   done(null, user.id);
 });
 
-// deserialize user from session
 passport.deserializeUser(async (id: any, done) => {
   try {
     const user = await prisma.user.findUnique({
-      where: {
-        id: id,
-      },
+      where: { id },
       select: {
         id: true,
         email: true,
         name: true,
-        createdAt: true,
-        googleId: true,
-        password: true,
       },
     });
 
-    if (!user) return done(null, null);
+    if (!user) return done(null, false);
 
-    // Return user in the format expected by Express User interface
     const transformedUser = {
       userId: user.id,
       email: user.email,
