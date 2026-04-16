@@ -37,7 +37,6 @@ app.use(
   }),
 );
 
-//  Stripe webhook MUST come before express.json() — needs raw body
 app.post(
   "/stripe/webhook",
   express.raw({ type: "application/json" }),

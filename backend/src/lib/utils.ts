@@ -48,10 +48,39 @@ export function toLanguage(raw: unknown): Language | undefined {
   return undefined;
 }
 
-export const invalidateNotifications = async (organizationId: number) => {
-  const keys = await redisClient.get(`org:${organizationId}:notifications:*`);
-  if (keys && keys.length > 0) {
-    await redisClient.del(keys);
+export const invalidateNotifications = async (
+  organizationId: number,
+): Promise<number> => {
+  try {
+    const pattern = `org:${organizationId}:notifications:*`;
+    const keys: string[] = [];
+    let cursor = "0";
+
+    do {
+      const response = (await redisClient.scan(cursor, {
+        MATCH: pattern,
+        COUNT: 100,
+      })) as { cursor: string; keys: string[] };
+
+      cursor = response.cursor;
+      keys.push(...response.keys);
+    } while (cursor !== "0");
+
+    if (keys.length > 0) {
+      const BATCH_SIZE = 1000;
+      for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+        const batch = keys.slice(i, i + BATCH_SIZE);
+        await redisClient.del(batch);
+      }
+    }
+
+    return keys.length;
+  } catch (error) {
+    console.error(
+      `Error invalidating notifications for org ${organizationId}:`,
+      error,
+    );
+    return 0;
   }
 };
 

@@ -1,9 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
-import { useParams } from "next/navigation";
-import { useUserPlan, useCheckout } from "@/hooks/payment/usePayment";
+import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  useOrganizationPlan,
+  useCheckout,
+  useCancelSubscription,
+} from "@/hooks/payment/usePayment";
 import { useOrganizations } from "@/hooks/organization/useOrganizations";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Check,
@@ -16,6 +21,7 @@ import {
   ShieldCheck,
   Star,
   Loader2,
+  XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,54 +109,209 @@ const PLANS: PlanConfig[] = [
 ];
 
 /* ─── status helpers ─── */
-const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  active: { bg: "rgba(20,184,166,0.12)", text: "#2dd4bf", label: "Active" },
-  past_due: { bg: "rgba(239,68,68,0.12)", text: "#f87171", label: "Past Due" },
-  canceled: { bg: "rgba(107,114,128,0.12)", text: "#9ca3af", label: "Canceled" },
-  free: { bg: "rgba(107,114,128,0.12)", text: "#9ca3af", label: "Free Tier" },
+const STATUS_STYLES: Record<
+  string,
+  { bg: string; text: string; label: string }
+> = {
+  ACTIVE: { bg: "rgba(20,184,166,0.12)", text: "#2dd4bf", label: "Active" },
+  PAST_DUE: { bg: "rgba(239,68,68,0.12)", text: "#f87171", label: "Past Due" },
+  CANCELED: {
+    bg: "rgba(107,114,128,0.12)",
+    text: "#9ca3af",
+    label: "Canceled",
+  },
+  TRIALING: { bg: "rgba(245,158,11,0.12)", text: "#fbbf24", label: "Trialing" },
 };
 
 function getStatus(plan: PlanKey, status?: string) {
-  if (plan === "FREE") return STATUS_STYLES.free;
-  return STATUS_STYLES[status ?? "active"] ?? STATUS_STYLES.active;
+  if (plan === "FREE") {
+    return {
+      bg: "rgba(107,114,128,0.12)",
+      text: "#9ca3af",
+      label: "Free Tier",
+    };
+  }
+  return STATUS_STYLES[status ?? "ACTIVE"] ?? STATUS_STYLES.ACTIVE;
 }
 
-/* ══════════════════════════════
+/* 
    COMPONENT
-══════════════════════════════ */
+ */
 export default function BillingPage() {
   const { slug } = useParams();
-  const { data: orgs } = useOrganizations();
-  const { data: planData, isLoading: planLoading } = useUserPlan();
-  const [confirmPlan, setConfirmPlan] = useState<"pro" | "enterprise" | null>(null);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: orgs, isLoading: orgsLoading } = useOrganizations();
 
+  // Resolve the current org from slug
   const currentSlug = Array.isArray(slug) ? slug[0] : slug;
   const activeOrg = orgs?.find((o) => o.slug === currentSlug);
-  const organizationId = activeOrg?.id ?? planData?.organizationId ?? 0;
 
-  const { mutate: checkout, isPending: checkoutPending } = useCheckout(organizationId);
+  // BUG 2+3 FIX: Use numeric organizationId (not slug string) for the plan hook.
+  // This ensures queryKey is ["org-plan", 123] consistently, so cache
+  // invalidation after Stripe redirect actually refreshes the right query.
+  const organizationId = activeOrg?.id ? Number(activeOrg.id) : undefined;
+  const isOwner = activeOrg?.role === "OWNER";
 
-  const currentPlan = (planData?.plan ?? "FREE") as PlanKey;
-  const subscriptionStatus = planData?.status;
-  const expiresAt = planData?.expiresAt ? new Date(planData.expiresAt) : null;
+  const {
+    data: planData,
+    isLoading: planLoading,
+    refetch: refetchPlan,
+  } = useOrganizationPlan(
+    isOwner && organizationId && !Number.isNaN(organizationId)
+      ? organizationId
+      : undefined,
+  );
 
+  const checkout = useCheckout();
+  const cancelSubscription = useCancelSubscription();
+  const [confirmPlan, setConfirmPlan] = useState<PlanKey | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  // Validate organization exists
+  useEffect(() => {
+    if (!orgsLoading && !activeOrg && slug) {
+      toast.error("Organization not found");
+    }
+  }, [orgsLoading, activeOrg, slug]);
+
+  // Owners only can access billing page
+  useEffect(() => {
+    if (orgsLoading || !activeOrg) return;
+
+    if (activeOrg.role !== "OWNER") {
+      toast.error("Only organization owners can access billing");
+      router.replace(`/organization/${activeOrg.slug}/dashboard`);
+    }
+  }, [orgsLoading, activeOrg, router]);
+
+  const currentPlan = planData?.data?.plan ?? "FREE";
+  const subscriptionStatus = planData?.data?.status;
+  const expiresAt = planData?.data?.expiresAt
+    ? new Date(planData.data.expiresAt)
+    : null;
+  const usage = planData?.data?.usage;
   const statusStyle = getStatus(currentPlan, subscriptionStatus);
 
   function handleUpgrade(planKey: PlanKey) {
+    if (activeOrg?.role !== "OWNER") {
+      toast.error("Only organization owners can upgrade plans");
+      return;
+    }
+
     if (planKey === "FREE" || planKey === currentPlan) return;
-    const planArg = planKey.toLowerCase() as "pro" | "enterprise";
-    setConfirmPlan(planArg);
+    if (!organizationId) {
+      toast.error("Organization not selected");
+      return;
+    }
+    setConfirmPlan(planKey);
   }
 
-  function confirmCheckout() {
-    if (!confirmPlan) return;
-    checkout(confirmPlan, {
-      onError: () => toast.error("Failed to create checkout session. Try again."),
-    });
+  async function confirmCheckout() {
+    if (activeOrg?.role !== "OWNER") {
+      toast.error("Only organization owners can upgrade plans");
+      return;
+    }
+
+    if (!confirmPlan || !organizationId) return;
+    if (activeOrg?.slug) {
+      localStorage.setItem("lastPaidOrgSlug", activeOrg.slug);
+    }
+
+    setIsRedirecting(true);
+    checkout.mutate(
+      {
+        plan: confirmPlan as Exclude<PlanKey, "FREE">,
+        organizationId,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Redirecting to checkout...");
+          // window.location.href redirect is handled inside useCheckout onSuccess
+        },
+        onError: (error: unknown) => {
+          const err = error as {
+            response?: { data?: { message?: string } };
+            message?: string;
+          };
+          const message =
+            err.response?.data?.message ||
+            err.message ||
+            "Failed to create checkout session";
+          toast.error(message);
+          setIsRedirecting(false);
+          setConfirmPlan(null);
+        },
+      },
+    );
   }
 
-  /* loading skeleton */
-  if (planLoading) {
+  function handleCancelSubscription() {
+    if (!organizationId) return;
+
+    cancelSubscription.mutate(
+      { organizationId },
+      {
+        onSuccess: () => {
+          toast.success("Subscription canceled successfully");
+          setShowCancelConfirm(false);
+          refetchPlan();
+          queryClient.invalidateQueries({
+            queryKey: ["org-plan", organizationId],
+          });
+        },
+        onError: (error: unknown) => {
+          const err = error as {
+            response?: { data?: { message?: string } };
+            message?: string;
+          };
+          const message =
+            err.response?.data?.message ||
+            err.message ||
+            "Failed to cancel subscription";
+          toast.error(message);
+        },
+      },
+    );
+  }
+
+  // Refetch plan data when window regains focus (user returns from Stripe).
+  // BUG 2+3 FIX: Now that organizationId is a proper number, queryKey invalidation
+  // correctly targets ["org-plan", 123] and the refetch actually updates the UI.
+  useEffect(() => {
+    const handleFocus = () => {
+      if (organizationId) {
+        refetchPlan();
+        queryClient.invalidateQueries({
+          queryKey: ["org-plan", organizationId],
+        });
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [organizationId, refetchPlan, queryClient]);
+
+  // Loading states
+  if (orgsLoading || planLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="size-7 text-teal-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!activeOrg) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <AlertCircle className="size-12 text-zinc-600" />
+        <p className="text-zinc-400">Organization not found</p>
+      </div>
+    );
+  }
+
+  if (activeOrg.role !== "OWNER") {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="size-7 text-teal-500 animate-spin" />
@@ -160,16 +321,17 @@ export default function BillingPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12">
-
       {/* ── Page Header ── */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
       >
-        <h1 className="text-2xl font-bold text-white tracking-tight">Billing & Subscription</h1>
+        <h1 className="text-2xl font-bold text-white tracking-tight">
+          Billing & Subscription
+        </h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Manage your organization's plan, usage, and subscription.
+          Manage your organization&apos;s plan, usage, and subscription.
         </p>
       </motion.div>
 
@@ -185,7 +347,6 @@ export default function BillingPage() {
           boxShadow: "0 0 30px rgba(20,184,166,0.06)",
         }}
       >
-        {/* Icon */}
         <div
           className="flex items-center justify-center size-12 rounded-xl shrink-0"
           style={{
@@ -196,10 +357,11 @@ export default function BillingPage() {
           <Building2 className="size-5 text-teal-100" strokeWidth={1.8} />
         </div>
 
-        {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-base font-semibold text-white">{activeOrg?.name ?? "Your Organization"}</span>
+            <span className="text-base font-semibold text-white">
+              {activeOrg.name}
+            </span>
             <Badge
               className="text-xs px-2 py-0.5 border-0"
               style={{ background: statusStyle.bg, color: statusStyle.text }}
@@ -219,12 +381,52 @@ export default function BillingPage() {
           </p>
         </div>
 
-        {/* Shield badge */}
         <div className="flex items-center gap-1.5 text-xs text-teal-600 shrink-0">
           <ShieldCheck className="size-4" />
           Secured by Stripe
         </div>
       </motion.div>
+
+      {/* ── Usage Stats (if available) ── */}
+      {usage && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border p-5"
+          style={{
+            background: "rgba(255,255,255,0.02)",
+            borderColor: "rgba(255,255,255,0.07)",
+          }}
+        >
+          <h3 className="text-sm font-semibold text-white mb-3">Usage</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-zinc-500">Snippets</p>
+              <p className="text-lg font-semibold text-white">
+                {usage.snippets.current} /{" "}
+                {usage.snippets.limit === Infinity ? "∞" : usage.snippets.limit}
+              </p>
+              {usage.snippets.percentage > 80 && (
+                <p className="text-xs text-orange-500 mt-1">
+                  Approaching limit
+                </p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">Members</p>
+              <p className="text-lg font-semibold text-white">
+                {usage.members.current} /{" "}
+                {usage.members.limit === Infinity ? "∞" : usage.members.limit}
+              </p>
+              {usage.members.percentage > 80 && (
+                <p className="text-xs text-orange-500 mt-1">
+                  Approaching limit
+                </p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* ── Plans Grid ── */}
       <div>
@@ -235,8 +437,10 @@ export default function BillingPage() {
           {PLANS.map((plan, i) => {
             const Icon = plan.icon;
             const isCurrentPlan = plan.key === currentPlan;
-            const isUpgrade =
-              plan.key !== "FREE" && plan.key !== currentPlan && !(currentPlan === "ENTERPRISE" && plan.key === "PRO");
+            const isUpgradeable =
+              plan.key !== "FREE" &&
+              plan.key !== currentPlan &&
+              !(currentPlan === "ENTERPRISE" && plan.key === "PRO");
 
             return (
               <motion.div
@@ -249,12 +453,14 @@ export default function BillingPage() {
                   background: isCurrentPlan
                     ? `linear-gradient(140deg, ${plan.glowColor} 0%, rgba(0,0,0,0.6) 100%)`
                     : "rgba(255,255,255,0.02)",
-                  borderColor: isCurrentPlan ? plan.borderActive : "rgba(255,255,255,0.07)",
-                  boxShadow: isCurrentPlan ? `0 0 30px ${plan.glowColor}` : "none",
-                  transition: "box-shadow 0.3s, border-color 0.3s",
+                  borderColor: isCurrentPlan
+                    ? plan.borderActive
+                    : "rgba(255,255,255,0.07)",
+                  boxShadow: isCurrentPlan
+                    ? `0 0 30px ${plan.glowColor}`
+                    : "none",
                 }}
               >
-                {/* Popular badge */}
                 {plan.badge && (
                   <span
                     className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-widest px-3 py-0.5 rounded-full"
@@ -268,7 +474,6 @@ export default function BillingPage() {
                   </span>
                 )}
 
-                {/* Header */}
                 <div className="flex items-center gap-3 mb-3">
                   <div
                     className="flex items-center justify-center size-9 rounded-xl"
@@ -277,33 +482,45 @@ export default function BillingPage() {
                       boxShadow: `0 0 12px ${plan.glowColor}`,
                     }}
                   >
-                    <Icon className="size-4" style={{ color: plan.iconColor }} strokeWidth={2} />
+                    <Icon
+                      className="size-4"
+                      style={{ color: plan.iconColor }}
+                      strokeWidth={2}
+                    />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-white">{plan.label}</p>
+                    <p className="text-sm font-semibold text-white">
+                      {plan.label}
+                    </p>
                     <p className="text-[10px] text-zinc-500">{plan.limit}</p>
                   </div>
                 </div>
 
-                {/* Price */}
                 <div className="mb-3">
                   {plan.price === 0 ? (
                     <span className="text-3xl font-bold text-white">Free</span>
                   ) : (
                     <>
-                      <span className="text-3xl font-bold text-white">${plan.price}</span>
-                      <span className="text-sm text-zinc-500 ml-1">/ {plan.period}</span>
+                      <span className="text-3xl font-bold text-white">
+                        ${plan.price}
+                      </span>
+                      <span className="text-sm text-zinc-500 ml-1">
+                        / {plan.period}
+                      </span>
                     </>
                   )}
                 </div>
 
-                {/* Description */}
-                <p className="text-xs text-zinc-400 mb-4 leading-relaxed">{plan.description}</p>
+                <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
+                  {plan.description}
+                </p>
 
-                {/* Features */}
                 <ul className="space-y-2 mb-5 flex-1">
                   {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-xs text-zinc-300">
+                    <li
+                      key={f}
+                      className="flex items-start gap-2 text-xs text-zinc-300"
+                    >
                       <Check
                         className="size-3.5 mt-0.5 shrink-0"
                         style={{ color: plan.iconColor }}
@@ -314,7 +531,6 @@ export default function BillingPage() {
                   ))}
                 </ul>
 
-                {/* CTA */}
                 {isCurrentPlan ? (
                   <div
                     className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold"
@@ -326,7 +542,7 @@ export default function BillingPage() {
                     <Sparkles className="size-3.5" />
                     Current Plan
                   </div>
-                ) : isUpgrade ? (
+                ) : isUpgradeable ? (
                   <Button
                     className="w-full text-xs font-semibold rounded-xl py-2 border-0 cursor-pointer"
                     style={{
@@ -336,12 +552,14 @@ export default function BillingPage() {
                           : "linear-gradient(135deg, #0f766e, #0d9488)",
                       color: plan.key === "ENTERPRISE" ? "#fbbf24" : "#ccfbf1",
                       boxShadow:
-                        plan.key === "PRO" ? "0 0 14px rgba(20,184,166,0.3)" : "none",
+                        plan.key === "PRO"
+                          ? "0 0 14px rgba(20,184,166,0.3)"
+                          : "none",
                     }}
                     onClick={() => handleUpgrade(plan.key)}
-                    disabled={checkoutPending}
+                    disabled={checkout.isPending || isRedirecting}
                   >
-                    {checkoutPending ? (
+                    {checkout.isPending || isRedirecting ? (
                       <Loader2 className="size-3.5 animate-spin" />
                     ) : (
                       `Upgrade to ${plan.label}`
@@ -352,7 +570,9 @@ export default function BillingPage() {
                     className="flex items-center justify-center py-2 rounded-xl text-xs font-medium text-zinc-600"
                     style={{ background: "rgba(255,255,255,0.03)" }}
                   >
-                    {currentPlan === "ENTERPRISE" ? "Highest plan" : "Downgrade"}
+                    {currentPlan === "ENTERPRISE"
+                      ? "Highest plan"
+                      : "Downgrade"}
                   </div>
                 )}
               </motion.div>
@@ -373,7 +593,9 @@ export default function BillingPage() {
             borderColor: "rgba(255,255,255,0.07)",
           }}
         >
-          <h2 className="text-sm font-semibold text-white">Subscription Details</h2>
+          <h2 className="text-sm font-semibold text-white">
+            Subscription Details
+          </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { label: "Plan", value: currentPlan },
@@ -388,25 +610,119 @@ export default function BillingPage() {
                 <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold">
                   {item.label}
                 </p>
-                <p className="text-sm font-semibold text-white mt-0.5">{item.value}</p>
+                <p className="text-sm font-semibold text-white mt-0.5">
+                  {item.value}
+                </p>
               </div>
             ))}
           </div>
 
-          <div
-            className="flex items-start gap-2 rounded-xl p-3 mt-2"
-            style={{ background: "rgba(20,184,166,0.06)", border: "1px solid rgba(20,184,166,0.12)" }}
-          >
-            <AlertCircle className="size-4 text-teal-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              To cancel or change your subscription, please manage it through your Stripe
-              customer portal. Cancellations take effect at the end of the current billing period.
-            </p>
-          </div>
+          {subscriptionStatus !== "CANCELED" && (
+            <div className="pt-2">
+              <Button
+                variant="outline"
+                className="text-xs font-medium rounded-xl border-red-900/40 text-red-400 hover:text-red-300 hover:border-red-800/60 hover:bg-red-950/30 bg-transparent cursor-pointer"
+                onClick={() => setShowCancelConfirm(true)}
+                disabled={cancelSubscription.isPending}
+              >
+                {cancelSubscription.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <XCircle className="size-3.5 mr-1.5" />
+                )}
+                Cancel Subscription
+              </Button>
+            </div>
+          )}
         </motion.div>
       )}
 
-      {/* ── Confirm Modal ── */}
+      {/* ── Cancel Confirm Modal ── */}
+      <AnimatePresence>
+        {showCancelConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{
+              background: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.94 }}
+              className="w-full max-w-sm rounded-2xl border p-6 space-y-5"
+              style={{
+                background: "#0d0d12",
+                borderColor: "rgba(239,68,68,0.2)",
+                boxShadow: "0 0 40px rgba(239,68,68,0.08)",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex items-center justify-center size-10 rounded-xl"
+                  style={{ background: "rgba(239,68,68,0.12)" }}
+                >
+                  <XCircle className="size-5 text-red-400" strokeWidth={2} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    Cancel Subscription
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    Your plan will revert to Free immediately.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className="rounded-xl p-3"
+                style={{
+                  background: "rgba(239,68,68,0.06)",
+                  border: "1px solid rgba(239,68,68,0.12)",
+                }}
+              >
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  This will cancel your <span className="text-white font-semibold">{currentPlan}</span> plan
+                  immediately. You&apos;ll lose access to paid features including
+                  increased member limits and unlimited snippets.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 text-xs rounded-xl border-zinc-800 text-zinc-400 hover:text-white bg-transparent"
+                  onClick={() => setShowCancelConfirm(false)}
+                  disabled={cancelSubscription.isPending}
+                >
+                  Keep Plan
+                </Button>
+                <Button
+                  className="flex-1 text-xs rounded-xl border-0 cursor-pointer"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(239,68,68,0.2), rgba(239,68,68,0.1))",
+                    color: "#f87171",
+                  }}
+                  onClick={handleCancelSubscription}
+                  disabled={cancelSubscription.isPending}
+                >
+                  {cancelSubscription.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    "Yes, Cancel"
+                  )}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Upgrade Confirm Modal ── */}
       <AnimatePresence>
         {confirmPlan && (
           <motion.div
@@ -414,7 +730,10 @@ export default function BillingPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
+            style={{
+              background: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+            }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.94 }}
@@ -436,17 +755,17 @@ export default function BillingPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-white capitalize">
-                    Upgrade to {confirmPlan}
+                    Upgrade to {confirmPlan.toLowerCase()}
                   </p>
                   <p className="text-xs text-zinc-500">
-                    You'll be redirected to Stripe to complete payment.
+                    You&apos;ll be redirected to Stripe to complete payment.
                   </p>
                 </div>
               </div>
 
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Your subscription will start immediately after payment. You can cancel anytime
-                before the next billing cycle.
+                Your subscription will start immediately after payment. You can
+                cancel anytime before the next billing cycle.
               </p>
 
               <div className="flex gap-3">
@@ -454,7 +773,7 @@ export default function BillingPage() {
                   variant="outline"
                   className="flex-1 text-xs rounded-xl border-zinc-800 text-zinc-400 hover:text-white bg-transparent"
                   onClick={() => setConfirmPlan(null)}
-                  disabled={checkoutPending}
+                  disabled={checkout.isPending || isRedirecting}
                 >
                   Cancel
                 </Button>
@@ -466,9 +785,9 @@ export default function BillingPage() {
                     boxShadow: "0 0 14px rgba(20,184,166,0.3)",
                   }}
                   onClick={confirmCheckout}
-                  disabled={checkoutPending}
+                  disabled={checkout.isPending || isRedirecting}
                 >
-                  {checkoutPending ? (
+                  {checkout.isPending || isRedirecting ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
                     "Continue to Stripe"

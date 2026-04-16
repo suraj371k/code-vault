@@ -58,3 +58,9 @@ export const Plan = {
     PRO: 'PRO',
     ENTERPRISE: 'ENTERPRISE'
 };
+export const SubscriptionStatus = {
+    ACTIVE: 'ACTIVE',
+    CANCELED: 'CANCELED',
+    PAST_DUE: 'PAST_DUE',
+    TRIALING: 'TRIALING'
+};

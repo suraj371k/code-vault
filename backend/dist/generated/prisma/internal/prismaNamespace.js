@@ -77,7 +77,8 @@ export const ModelName = {
     GroupMember: 'GroupMember',
     Conversation: 'Conversation',
     ConversationMember: 'ConversationMember',
-    Notification: 'Notification'
+    Notification: 'Notification',
+    Subscription: 'Subscription'
 };
 /**
  * Enums
@@ -106,8 +107,9 @@ export const OrganizationScalarFieldEnum = {
     plan: 'plan',
     stripeCustomerId: 'stripeCustomerId',
     subscriptionId: 'subscriptionId',
+    planExpiresAt: 'planExpiresAt',
     subscriptionStatus: 'subscriptionStatus',
-    planExpiresAt: 'planExpiresAt'
+    billingOwnerId: 'billingOwnerId'
 };
 export const MembershipScalarFieldEnum = {
     id: 'id',
@@ -174,6 +176,16 @@ export const NotificationScalarFieldEnum = {
     organizationId: 'organizationId',
     messageId: 'messageId',
     groupId: 'groupId',
+    createdAt: 'createdAt'
+};
+export const SubscriptionScalarFieldEnum = {
+    id: 'id',
+    organizationId: 'organizationId',
+    plan: 'plan',
+    status: 'status',
+    stripeSubscriptionId: 'stripeSubscriptionId',
+    startDate: 'startDate',
+    endDate: 'endDate',
     createdAt: 'createdAt'
 };
 export const SortOrder = {

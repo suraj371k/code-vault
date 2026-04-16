@@ -5,7 +5,6 @@ import { getIO } from "../lib/socket.js";
 import redisClient from "../lib/redis.js";
 import { invalidateNotifications, invalidateSnippets, toLanguage, } from "../lib/utils.js";
 import { PLAN_LIMITS } from "../config/planLimits.js";
-// helpers
 // controllers
 export const createSnippets = async (req, res) => {
     try {
@@ -21,6 +20,14 @@ export const createSnippets = async (req, res) => {
                 .status(404)
                 .json({ success: false, message: "user not found" });
         }
+        const organization = await prisma.organization.findUnique({
+            where: {
+                id: organizationId,
+            },
+            select: {
+                plan: true,
+            },
+        });
         const membership = await prisma.membership.findFirst({
             where: { userId, organizationId },
         });
@@ -44,20 +51,12 @@ export const createSnippets = async (req, res) => {
             });
         }
         const { summary, tags } = await generateSummary(parsedLanguage ?? null, code);
-        const user = await prisma.user.findUnique({
-            where: {
-                id: userId,
-            },
-            select: {
-                plan: true,
-            },
-        });
-        if (!user) {
+        if (!organization) {
             return res
                 .status(404)
                 .json({ success: false, message: "user not found" });
         }
-        const limit = PLAN_LIMITS[user.plan].snippetsPerOrg;
+        const limit = PLAN_LIMITS[organization.plan].snippetsPerOrg;
         if (limit !== Infinity) {
             const snippetCount = await prisma.snippet.count({
                 where: { organizationId },
@@ -65,7 +64,7 @@ export const createSnippets = async (req, res) => {
             if (snippetCount >= limit) {
                 return res.status(403).json({
                     success: false,
-                    message: `Your ${user.plan} plan allows only ${limit} snippets per organization. Upgrade to add more.`,
+                    message: `Your ${organization.plan} plan allows only ${limit} snippets per organization. Upgrade to add more.`,
                     currentCount: snippetCount,
                     limit,
                 });
@@ -84,8 +83,6 @@ export const createSnippets = async (req, res) => {
                 organizationId,
             },
         });
-        // invalidate cache after snippet is created
-        await invalidateSnippets(organizationId);
         const io = getIO();
         // for snippet real time update
         io.to(`organization:${organizationId}`).emit("newSnippet", {
@@ -95,6 +92,8 @@ export const createSnippets = async (req, res) => {
             where: { organizationId },
             select: { userId: true },
         });
+        // invalidate cache after snippet is created
+        await invalidateSnippets(organizationId);
         await prisma.notification.createMany({
             data: members
                 .filter((member) => member.userId !== userId)

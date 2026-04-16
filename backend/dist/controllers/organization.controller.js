@@ -1,15 +1,6 @@
 import { prisma } from "../lib/prisma.js";
-import { invalidateNotifications } from "../lib/utils.js";
+import { generateSlug, invalidateNotifications } from "../lib/utils.js";
 import { PLAN_LIMITS } from "../config/planLimits.js";
-export const generateSlug = (name) => {
-    return name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "");
-};
 export const generateUniqueSlug = async (name) => {
     const baseSlug = generateSlug(name);
     const existing = await prisma.organization.findUnique({
@@ -44,34 +35,39 @@ export const createOrganization = async (req, res) => {
         }
         const slug = await generateUniqueSlug(name.trim());
         const user = await prisma.user.findUnique({
-            where: {
-                id: userId,
-            },
-            select: {
-                plan: true,
-                memberships: { select: { id: true } },
+            where: { id: userId },
+            include: {
+                memberships: {
+                    include: {
+                        organization: true,
+                    },
+                },
             },
         });
         if (!user) {
-            return res
-                .status(404)
-                .json({ success: false, message: "user not found" });
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
         }
-        // check organization limit
-        const limit = PLAN_LIMITS[user.plan].organizations;
-        const currentCount = user.memberships.length;
-        if (currentCount >= limit) {
+        const currentOrgCount = user.memberships.length;
+        const newOrgPlan = "FREE";
+        const limit = PLAN_LIMITS[newOrgPlan].organizations;
+        if (currentOrgCount >= limit) {
             return res.status(403).json({
                 success: false,
-                message: `Your ${user.plan} plan allows only ${limit} organization${limit === 1 ? "" : "s"}. Upgrade to create more.`,
-                currentCount,
+                message: `You have reached the limit of ${limit}  on the FREE plan. Upgrade an existing organization or contact support.`,
+                currentCount: currentOrgCount,
                 limit,
             });
         }
+        // Create organization with FREE plan
         const organization = await prisma.organization.create({
             data: {
                 name,
                 slug,
+                plan: "FREE",
+                subscriptionStatus: "ACTIVE", // Free plan is always active
                 members: {
                     create: {
                         userId,
@@ -80,113 +76,190 @@ export const createOrganization = async (req, res) => {
                 },
             },
             include: {
-                members: true,
+                members: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                            },
+                        },
+                    },
+                },
             },
         });
         return res.status(201).json({
             success: true,
             message: "Organization created successfully",
-            data: organization,
+            data: {
+                ...organization,
+                limits: PLAN_LIMITS[organization.plan],
+            },
         });
     }
     catch (error) {
-        console.log(`error in create organization controller: ${error}`);
-        return res
-            .status(500)
-            .json({ success: false, message: "Internal server error" });
+        console.error(`Error in createOrganization: ${error}`);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
     }
 };
 export const addMembers = async (req, res) => {
     try {
         const { email } = req.body;
-        const userId = req.user.userId;
+        const requesterId = req.user.userId;
         const organizationId = Number(req.params.organizationId);
-        const requesterId = Number(req.user.userId);
-        const ownerMembership = await prisma.membership.findFirst({
+        // Validate input
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: "Email is required",
+            });
+        }
+        // Get organization with its plan
+        const organization = await prisma.organization.findUnique({
+            where: { id: organizationId },
+            select: {
+                id: true,
+                plan: true,
+                name: true,
+            },
+        });
+        if (!organization) {
+            return res.status(404).json({
+                success: false,
+                message: "Organization not found",
+            });
+        }
+        // Check if requester is an OWNER of the organization
+        const requesterMembership = await prisma.membership.findFirst({
             where: {
                 organizationId,
                 userId: requesterId,
                 role: "OWNER",
             },
         });
-        if (!ownerMembership) {
+        if (!requesterMembership) {
             return res.status(403).json({
                 success: false,
                 message: "Only organization owners can invite members",
             });
         }
-        const user = await prisma.user.findUnique({
+        // Find user by email
+        const userToAdd = await prisma.user.findUnique({
             where: { email },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+            },
         });
-        if (!user) {
+        if (!userToAdd) {
             return res.status(404).json({
                 success: false,
-                message: "User not found",
+                message: "User not found with this email",
             });
         }
+        // Check if user is already a member
         const existingMember = await prisma.membership.findFirst({
             where: {
-                userId: user.id,
+                userId: userToAdd.id,
                 organizationId,
             },
         });
         if (existingMember) {
             return res.status(400).json({
                 success: false,
-                message: "User already in organization",
+                message: "User is already a member of this organization",
             });
         }
-        const limit = PLAN_LIMITS[user.plan].membersPerOrg;
-        if (limit !== Infinity) {
-            const memberCount = await prisma.membership.count({
+        const planLimits = PLAN_LIMITS[organization.plan];
+        const memberLimit = planLimits.membersPerOrg;
+        if (memberLimit !== Infinity) {
+            const currentMemberCount = await prisma.membership.count({
                 where: { organizationId },
             });
-            if (memberCount >= limit) {
+            if (currentMemberCount >= memberLimit) {
                 return res.status(403).json({
                     success: false,
-                    message: `Your ${user.plan} plan allows only ${limit} members per organization. Upgrade to add more.`,
-                    currentCount: memberCount,
-                    limit,
+                    message: `Your ${organization.plan} plan allows only ${memberLimit} member${memberLimit === 1 ? "" : "s"} per organization. Upgrade to add more.`,
+                    currentCount: currentMemberCount,
+                    limit: memberLimit,
                 });
             }
         }
+        // Add user to organization
         const membership = await prisma.membership.create({
             data: {
-                userId: user.id,
+                userId: userToAdd.id,
                 organizationId,
                 role: "MEMBER",
             },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+            },
         });
-        const members = await prisma.membership.findMany({
+        const currentMembers = await prisma.membership.findMany({
             where: {
                 organizationId,
+                NOT: {
+                    userId: {
+                        in: [requesterId, userToAdd.id],
+                    },
+                },
             },
             select: {
                 userId: true,
             },
         });
-        await prisma.notification.createMany({
-            data: members
-                .filter((member) => member.userId !== userId && member.userId !== user.id)
-                .map((member) => ({
-                userId: member.userId,
+        if (currentMembers.length > 0) {
+            await prisma.notification.createMany({
+                data: currentMembers.map((member) => ({
+                    userId: member.userId,
+                    organizationId,
+                    type: "NEW_MEMBER",
+                    message: `${userToAdd.name} joined the organization`,
+                    isRead: false,
+                })),
+            });
+        }
+        await prisma.notification.create({
+            data: {
+                userId: userToAdd.id,
                 organizationId,
                 type: "NEW_MEMBER",
-                message: `${user.name} joined the organization`,
-            })),
+                message: `You joined ${organization.name}`,
+                isRead: false,
+            },
         });
         await invalidateNotifications(organizationId);
         return res.status(201).json({
             success: true,
-            message: "User added to organization",
-            data: membership,
+            message: "User added to organization successfully",
+            data: {
+                membership,
+                organization: {
+                    id: organization.id,
+                    name: organization.name,
+                    plan: organization.plan,
+                },
+            },
         });
     }
     catch (error) {
-        console.log(`error in add member controller: ${error}`);
-        return res
-            .status(500)
-            .json({ success: false, message: "internal server error" });
+        console.error(`Error in addMembers controller: ${error}`);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
     }
 };
 export const getMembers = async (req, res) => {

@@ -38,10 +38,10 @@ import {
 } from "../ui/dropdown-menu";
 import InviteMembersDialog from "../invite-member";
 import CreateOrganizationDialog from "../create-organization";
-import { useUserPlan } from "@/hooks/payment/usePayment";
+import { useOrganizationPlan } from "@/hooks/payment/usePayment";
 import { Badge } from "../ui/badge";
 
-const items = [
+const baseItems = [
   { id: 0, path: "/dashboard", title: "Dashboard", icon: LayoutDashboard },
   {
     id: 1,
@@ -86,13 +86,25 @@ const DashboardSidebar = () => {
     });
   };
 
-  const { data: currentPlan } = useUserPlan();
-
   const currentSlug = Array.isArray(slug) ? slug[0] : slug;
   const activeOrganization = data?.find((org) => org.slug === currentSlug);
 
+  const organizationId = activeOrganization?.id
+    ? Number(activeOrganization.id)
+    : undefined;
+
+  const { data: planData } = useOrganizationPlan(
+    organizationId && !Number.isNaN(organizationId) ? organizationId : undefined,
+  );
+  const currentPlan = planData?.data;
+
+  const visibleItems =
+    activeOrganization?.role === "OWNER"
+      ? baseItems
+      : baseItems.filter((item) => item.path !== "/dashboard/billing");
+
   const activeId = (() => {
-    const sorted = [...items].sort((a, b) => b.path.length - a.path.length);
+    const sorted = [...visibleItems].sort((a, b) => b.path.length - a.path.length);
     const match = sorted.find((item) =>
       pathname.includes(item.path.replace("/dashboard", "dashboard")),
     );
@@ -109,17 +121,21 @@ const DashboardSidebar = () => {
     if (!hasValidSlug) {
       router.replace(`/organization/${data[0].slug}/dashboard`);
     }
-  }, [data, isPending, slug, router]);
+  }, [currentSlug, data, isPending, router]);
 
   useEffect(() => {
     if (!currentSlug) return;
+
     const base = `/organization/${currentSlug}/dashboard`;
     router.prefetch(base);
     router.prefetch(`${base}/snippets`);
     router.prefetch(`${base}/teams`);
     router.prefetch(`${base}/notifications`);
-    router.prefetch(`${base}/billing`);
-  }, [currentSlug, router]);
+
+    if (activeOrganization?.role === "OWNER") {
+      router.prefetch(`${base}/billing`);
+    }
+  }, [activeOrganization?.role, currentSlug, router]);
 
   /* plan badge color helper */
   const planBadgeStyle = (() => {
@@ -324,7 +340,7 @@ const DashboardSidebar = () => {
           </p>
 
           <SidebarMenu className="space-y-0.75">
-            {items.map((item, i) => {
+            {visibleItems.map((item, i) => {
               const isActive = activeId === item.id;
               const isBilling = item.id === 6;
               return (
