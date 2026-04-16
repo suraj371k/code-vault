@@ -83,14 +83,8 @@ model User {
   name       String
   googleId   String?  @unique
   isOnline   Boolean  @default(false)
-  plan       Plan     @default(FREE)
   lastSeenAt DateTime @default(now())
   createdAt  DateTime @default(now())
-
-  stripeCustomerId   String?   @unique
-  subscriptionId     String?   @unique
-  subscriptionStatus String? // active, canceled, past_due
-  planExpiresAt      DateTime?
 
   memberships Membership[]
   snippets    Snippet[]
@@ -112,6 +106,12 @@ model Organization {
   snippets    Snippet[]
   groups      Group[]
   collections Collection[]
+
+  plan               Plan      @default(FREE)
+  stripeCustomerId   String?   @unique
+  subscriptionId     String?   @unique
+  subscriptionStatus String? // active, canceled, past_due
+  planExpiresAt      DateTime?
 
   messages Message[]
 

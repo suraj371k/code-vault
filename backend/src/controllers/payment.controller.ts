@@ -37,62 +37,68 @@ const getExpiryDate = (subscription: Stripe.Subscription): Date | null => {
   }
 };
 
-// Helper to handle invoice payment renewal logic (used by both v1 and v2 events)
+// Helper to handle invoice payment renewal logic
 const handleInvoiceRenewal = async (subscriptionId: string) => {
   if (!subscriptionId) return;
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  const userId = Number(subscription.metadata.userId);
+  const orgId = Number(subscription.metadata.organizationId);
 
-  if (!userId || isNaN(userId)) {
-    console.log("Skipping renewal — no userId in metadata");
+  if (!orgId || isNaN(orgId)) {
+    console.log("Skipping renewal — no orgId in metadata");
     return;
   }
 
   const expiryDate = getExpiryDate(subscription);
 
-  await prisma.user.update({
-    where: { id: userId },
+  await prisma.organization.update({
+    where: { id: orgId },
     data: {
       subscriptionStatus: "active",
       ...(expiryDate && { planExpiresAt: expiryDate }),
     },
   });
 
-  console.log(`✅ Renewal successful for user ${userId}`);
+  console.log(` Renewal successful for organization ${orgId}`);
 };
 
 // Create Checkout Session
 export const createPayment = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
-    const { plan } = req.body;
+    const { plan, organizationId } = req.body;
 
     const selectedPlan = PLANS[plan as keyof typeof PLANS];
     if (!selectedPlan) {
       return res.status(400).json({ success: false, message: "Invalid plan" });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+    const org = await prisma.organization.findUnique({
+      where: {
+        id: organizationId,
+      },
+    });
+
+    if (!org) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
-      client_reference_id: String(userId),
+      client_reference_id: String(organizationId),
       line_items: [{ price: selectedPlan.priceId, quantity: 1 }],
       subscription_data: {
-        metadata: { userId: String(userId), plan },
+        metadata: { organizationId: String(organizationId), plan },
       },
       success_url: `${process.env.CORS_ORIGIN}/success`,
       cancel_url: `${process.env.CORS_ORIGIN}/pricing`,
     };
 
-    if (user.stripeCustomerId) {
-      sessionParams.customer = user.stripeCustomerId;
+    if (org.stripeCustomerId) {
+      sessionParams.customer = org.stripeCustomerId;
     } else {
-      sessionParams.customer_email = user.email;
+      sessionParams.customer_email = (req as any).user.email;
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
@@ -126,34 +132,26 @@ export const handleWebHook = async (req: Request, res: Response) => {
 
   try {
     switch (event.type) {
-
-      // ✅ User subscribed — save to DB
+      //  User subscribed
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = Number(session.client_reference_id);
+        const organizationId = Number(session.client_reference_id);
         const subscriptionId = session.subscription as string;
         const customerId = session.customer as string;
 
-        if (!userId || isNaN(userId)) {
+        if (!organizationId || isNaN(organizationId)) {
           console.log("Skipping — invalid userId");
           break;
         }
 
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const subscription =
+          await stripe.subscriptions.retrieve(subscriptionId);
         const plan = subscription.metadata.plan as keyof typeof PLANS;
         const planEnum = PLANS[plan]?.planEnum ?? "PRO";
         const expiryDate = getExpiryDate(subscription);
 
-        console.log("subscription data:", {
-          userId,
-          plan,
-          planEnum,
-          expiryDate,
-          current_period_end: (subscription as any).current_period_end,
-        });
-
-        await prisma.user.update({
-          where: { id: userId },
+        await prisma.organization.update({
+          where: { id: organizationId },
           data: {
             plan: planEnum,
             stripeCustomerId: customerId,
@@ -162,19 +160,19 @@ export const handleWebHook = async (req: Request, res: Response) => {
             ...(expiryDate && { planExpiresAt: expiryDate }),
           },
         });
-
-        console.log(`✅ User ${userId} subscribed to ${plan}`);
         break;
       }
 
-      // ✅ Monthly renewal — v1 snapshot event
+      //  Monthly renewal — v1 snapshot event
       case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
+        const invoice = event.data.object as Stripe.Invoice & {
+          subscription?: string;
+        };
         await handleInvoiceRenewal(invoice.subscription as string);
         break;
       }
 
-      // ✅ Monthly renewal — v2 thin event (invoice_payment.paid)
+      //  Monthly renewal — v2 thin event (invoice_payment.paid)
       // This is the newer Stripe API event format — handles the same renewal logic
       case "invoice_payment.paid" as any: {
         const invoicePayment = event.data.object as any;
@@ -184,41 +182,44 @@ export const handleWebHook = async (req: Request, res: Response) => {
         if (subscriptionId) {
           await handleInvoiceRenewal(subscriptionId);
         } else {
-          console.log("invoice_payment.paid — no subscriptionId found, skipping");
+          console.log(
+            "invoice_payment.paid — no subscriptionId found, skipping",
+          );
         }
         break;
       }
 
-      // ❌ Payment failed — v1
+      //  Payment failed — v1
       case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
+        const invoice = event.data.object as Stripe.Invoice & {
+          subscription?: string;
+        };
         const subscriptionId = invoice.subscription as string;
 
         if (!subscriptionId) break;
 
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const userId = Number(subscription.metadata.userId);
+        const subscription =
+          await stripe.subscriptions.retrieve(subscriptionId);
+        const orgId = Number(subscription.metadata.organizationId);
 
-        if (!userId || isNaN(userId)) break;
+        if (!orgId || isNaN(orgId)) break;
 
-        await prisma.user.update({
-          where: { id: userId },
+        await prisma.organization.update({
+          where: { id: orgId },
           data: { subscriptionStatus: "past_due" },
         });
-
-        console.log(`❌ Payment failed for user ${userId}`);
         break;
       }
 
-      // 🚫 Subscription cancelled
+      //  Subscription cancelled
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
-        const userId = Number(subscription.metadata.userId);
+        const orgId = Number(subscription.metadata.organizationId);
 
-        if (!userId || isNaN(userId)) break;
+        if (!orgId || isNaN(orgId)) break;
 
-        await prisma.user.update({
-          where: { id: userId },
+        await prisma.organization.update({
+          where: { id: orgId },
           data: {
             plan: "FREE",
             subscriptionId: null,
@@ -227,7 +228,6 @@ export const handleWebHook = async (req: Request, res: Response) => {
           },
         });
 
-        console.log(`🚫 Subscription cancelled for user ${userId}`);
         break;
       }
 
@@ -246,27 +246,54 @@ export const getUserPlan = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.userId;
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        plan: true,
-        subscriptionStatus: true,
-        planExpiresAt: true,
-      },
-    });
+    const organizationId =
+      Number(req.headers["x-organization-id"]) ||
+      Number(req.query.organizationId);
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+    let membership;
+
+    if (organizationId && !isNaN(organizationId)) {
+      membership = await prisma.membership.findFirst({
+        where: {
+          userId,
+          organizationId,
+        },
+        include: {
+          organization: true,
+        },
+      });
+    } else {
+      membership = await prisma.membership.findFirst({
+        where: { userId },
+        include: {
+          organization: true,
+        },
+      });
     }
+
+    if (!membership || !membership.organization) {
+      return res.status(404).json({
+        success: false,
+        message: "Organization not found for user",
+      });
+    }
+
+    const org = membership.organization;
 
     res.json({
       success: true,
-      plan: user.plan,
-      status: user.subscriptionStatus,
-      expiresAt: user.planExpiresAt,
-      isActive: user.subscriptionStatus === "active",
+      plan: org.plan,
+      status: org.subscriptionStatus,
+      expiresAt: org.planExpiresAt,
+      isActive: org.subscriptionStatus === "active",
+      organizationId: org.id,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("Error fetching user plan:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };

@@ -63,16 +63,10 @@ const CopyButton = ({ text }: { text: string }) => {
   );
 };
 
-/* ─────────────────────────────────────────────
+/* 
    Fenced code block with SyntaxHighlighter
-───────────────────────────────────────────── */
-const CodeBlock = ({
-  lang,
-  code,
-}: {
-  lang: string;
-  code: string;
-}) => (
+ */
+const CodeBlock = ({ lang, code }: { lang: string; code: string }) => (
   <div className="my-3.5 rounded-xl overflow-hidden border border-zinc-700/40 bg-[#0e0e10] shadow-xl">
     {/* Header bar */}
     <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/70 border-b border-zinc-800/60">
@@ -122,9 +116,9 @@ const CodeBlock = ({
   </div>
 );
 
-/* ─────────────────────────────────────────────
+/* 
    ReactMarkdown custom renderers
-───────────────────────────────────────────── */
+ */
 const MarkdownComponents = {
   /* Paragraph */
   p: ({ children }: React.HTMLAttributes<HTMLParagraphElement>) => (
@@ -150,8 +144,6 @@ const MarkdownComponents = {
     </h3>
   ),
 
-  /* Code — inline vs block */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   code: ({ inline, className, children }: any) => {
     const code = String(children).replace(/\n$/, "");
     const lang = /language-(\w+)/.exec(className || "")?.[1] ?? "";
@@ -253,9 +245,9 @@ const MarkdownComponents = {
   ),
 };
 
-/* ─────────────────────────────────────────────
+/* 
    Main ChatMessage component
-───────────────────────────────────────────── */
+ */
 interface ChatMessageProps {
   message: Msg;
 }
@@ -264,7 +256,9 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
   const isUser = message.role === "user";
 
   return (
-    <div className={cn("flex gap-2.5", isUser ? "justify-end" : "justify-start")}>
+    <div
+      className={cn("flex gap-2.5", isUser ? "justify-end" : "justify-start")}
+    >
       {/* AI avatar */}
       {!isUser && (
         <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-teal-950 to-zinc-900 border border-teal-800/50 flex items-center justify-center mt-1 shadow-sm">
@@ -278,16 +272,21 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
           "max-w-[86%] rounded-2xl leading-relaxed",
           isUser
             ? "bg-gradient-to-br from-teal-500/15 to-teal-600/10 border border-teal-700/30 rounded-tr-sm px-4 py-3"
-            : "bg-zinc-900/60 border border-zinc-800/50 rounded-tl-sm px-4 py-3"
+            : "bg-zinc-900/60 border border-zinc-800/50 rounded-tl-sm px-4 py-3",
         )}
         style={
           !isUser
-            ? { boxShadow: "inset 0 1px 0 rgba(255,255,255,.025), 0 2px 8px rgba(0,0,0,.3)" }
+            ? {
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,.025), 0 2px 8px rgba(0,0,0,.3)",
+              }
             : {}
         }
       >
         {isUser ? (
-          <p className="text-[13px] leading-[1.65] text-teal-100">{message.text}</p>
+          <p className="text-[13px] leading-[1.65] text-teal-100">
+            {message.text}
+          </p>
         ) : (
           <div>
             <ReactMarkdown

@@ -20,6 +20,7 @@ import {
   Plus,
   UserPlus,
   Bell,
+  CreditCard,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -54,6 +55,12 @@ const items = [
     path: "/dashboard/notifications",
     title: "Notifications",
     icon: Bell,
+  },
+  {
+    id: 6,
+    path: "/dashboard/billing",
+    title: "Billing",
+    icon: CreditCard,
   },
 ];
 
@@ -111,7 +118,16 @@ const DashboardSidebar = () => {
     router.prefetch(`${base}/snippets`);
     router.prefetch(`${base}/teams`);
     router.prefetch(`${base}/notifications`);
+    router.prefetch(`${base}/billing`);
   }, [currentSlug, router]);
+
+  /* plan badge color helper */
+  const planBadgeStyle = (() => {
+    const p = currentPlan?.plan;
+    if (p === "PRO") return { background: "rgba(20,184,166,0.18)", color: "#2dd4bf" };
+    if (p === "ENTERPRISE") return { background: "rgba(245,158,11,0.18)", color: "#fbbf24" };
+    return { background: "rgba(107,114,128,0.15)", color: "#9ca3af" };
+  })();
 
   return (
     <div
@@ -154,7 +170,12 @@ const DashboardSidebar = () => {
               </p>
               <div className="text-[13px] flex flex-col gap-2 font-semibold text-slate-200 mt-0.75 truncate leading-none">
                 <p>{activeOrganization?.name ?? "..."}</p>
-                <Badge className="w-20 text-white">{currentPlan?.plan}</Badge>
+                <Badge
+                  className="w-fit text-[10px] px-1.5 py-0.5 border-0"
+                  style={planBadgeStyle}
+                >
+                  {currentPlan?.plan ?? "FREE"}
+                </Badge>
               </div>
             </div>
 
@@ -305,6 +326,7 @@ const DashboardSidebar = () => {
           <SidebarMenu className="space-y-0.75">
             {items.map((item, i) => {
               const isActive = activeId === item.id;
+              const isBilling = item.id === 6;
               return (
                 <motion.div
                   key={item.id}
@@ -368,7 +390,7 @@ const DashboardSidebar = () => {
                                     "drop-shadow(0 0 6px rgba(94,234,212,0.75))",
                                 }
                               : {
-                                  color: "#52525b",
+                                  color: isBilling ? "#64748b" : "#52525b",
                                   filter: "drop-shadow(0 0 0px transparent)",
                                 }
                           }

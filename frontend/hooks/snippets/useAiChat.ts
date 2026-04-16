@@ -27,13 +27,16 @@ export const useAiChat = (snippetId: number, snippetTitle: string) => {
     abortRef.current = new AbortController();
 
     try {
-      const res = await fetch(`http://localhost:5001/api/ai/${snippetId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ question: text }),
-        signal: abortRef.current.signal,
-      });
+      const res = await fetch(
+        `https://code-snippet-backend-1m8g.onrender.com/api/ai/${snippetId}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ question: text }),
+          signal: abortRef.current.signal,
+        },
+      );
 
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
 
