@@ -4,11 +4,8 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Button } from "./ui/button";
 import { fadeUp } from "@/app/(auth)/login/page";
-import { useRouter } from "next/navigation";
 
 const GoogleLogin = () => {
-  const router = useRouter();
-
   const handleGoogleLogin = () => {
     window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`;
   };
