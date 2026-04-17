@@ -7,7 +7,7 @@ import { fadeUp } from "@/app/(auth)/login/page";
 
 const GoogleLogin = () => {
   const handleGoogleLogin = () => {
-    window.location.href = `http://localhost:5001/api/auth/google`;
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`;
   };
 
   return (

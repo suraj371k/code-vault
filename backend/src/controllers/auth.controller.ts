@@ -230,8 +230,6 @@ export const googleCallback = async (req: Request, res: Response) => {
       );
     }
 
-    // user here is the raw Prisma user object returned by passport strategy's done(null, user)
-    // it has .id (not .userId), since session: false skips deserializeUser
     const token = jwt.sign(
       { userId: user.id, email: user.email },
       process.env.JWT_SECRET!,
@@ -239,14 +237,6 @@ export const googleCallback = async (req: Request, res: Response) => {
         expiresIn: "5d",
       },
     );
-
-    // Set JWT token in cookies
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      maxAge: 5 * 24 * 60 * 60 * 1000,
-    });
 
     // Get user's first organization
     const userWithOrg = await prisma.user.findUnique({
@@ -267,13 +257,18 @@ export const googleCallback = async (req: Request, res: Response) => {
 
     const orgSlug = userWithOrg?.memberships?.[0]?.organization?.slug;
 
-    if (orgSlug) {
-      return res.redirect(
-        `${process.env.CORS_ORIGIN}/organization/${orgSlug}/dashboard`,
-      );
-    }
+    const redirectPath = orgSlug
+      ? `/organization/${orgSlug}/dashboard`
+      : "/";
 
-    return res.redirect(`${process.env.CORS_ORIGIN}/`);
+    // Pass token in URL so the frontend sets the cookie from its own domain.
+    // This avoids cross-origin cookie blocking in production (backend on render.com,
+    // frontend on a different domain).
+    // Note: /callback (not /auth/callback) — the (auth) folder is a Next.js route group
+    // and does NOT appear in the URL.
+    return res.redirect(
+      `${process.env.CORS_ORIGIN}/callback?token=${token}&redirect=${encodeURIComponent(redirectPath)}`,
+    );
   } catch (error) {
     console.error(`error in googleCallback controller: ${error}`);
     return res.redirect(
