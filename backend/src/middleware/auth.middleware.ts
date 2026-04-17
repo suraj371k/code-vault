@@ -22,7 +22,13 @@ export const authMiddleware = (
       return next();
     }
 
-    const token = req.cookies?.token;
+    const authHeader = req.headers.authorization;
+    const bearerToken =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.slice(7).trim()
+        : null;
+
+    const token = bearerToken || req.cookies?.token;
 
     if (!token) {
       return res

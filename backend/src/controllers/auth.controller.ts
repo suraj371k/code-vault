@@ -75,9 +75,12 @@ export const signup = async (req: Request, res: Response) => {
       maxAge: 5 * 24 * 60 * 60 * 1000,
     });
 
-    return res
-      .status(201)
-      .json({ success: true, message: "signup successfully", data: newUser });
+    return res.status(201).json({
+      success: true,
+      message: "signup successfully",
+      data: newUser,
+      token,
+    });
   } catch (error) {
     console.log("error in signup controller: ", error);
     return res
@@ -142,6 +145,7 @@ export const login = async (req: Request, res: Response) => {
       success: true,
       message: "Login successful",
       data: userWithoutPassword,
+      token,
     });
   } catch (error) {
     console.error(`error in login controller: ${error}`);
@@ -238,8 +242,6 @@ export const googleCallback = async (req: Request, res: Response) => {
       },
     );
 
-    // Set cookie on backend domain so it is sent automatically with API requests.
-    // This works in production even when frontend and backend are on different domains.
     res.cookie("token", token, {
       httpOnly: true,
       secure: true,
@@ -266,11 +268,11 @@ export const googleCallback = async (req: Request, res: Response) => {
 
     const orgSlug = userWithOrg?.memberships?.[0]?.organization?.slug;
 
-    const redirectPath = orgSlug
-      ? `/organization/${orgSlug}/dashboard`
-      : "/";
+    const redirectPath = orgSlug ? `/organization/${orgSlug}/dashboard` : "/";
 
-    return res.redirect(`${process.env.CORS_ORIGIN}${redirectPath}`);
+    return res.redirect(
+      `${process.env.CORS_ORIGIN}/callback?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectPath)}`,
+    );
   } catch (error) {
     console.error(`error in googleCallback controller: ${error}`);
     return res.redirect(

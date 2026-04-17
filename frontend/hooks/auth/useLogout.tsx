@@ -26,6 +26,10 @@ export const useLogout = () => {
       }
     },
     onSuccess: () => {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("auth_token");
+      }
+
       // Clear ALL cached queries so protected data is wiped on next login
       queryClient.clear();
     },

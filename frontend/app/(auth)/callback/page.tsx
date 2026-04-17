@@ -13,10 +13,9 @@ function AuthCallbackInner() {
     const redirect = params.get("redirect") || "/";
 
     if (token) {
-      // Set cookie from the frontend domain — avoids cross-origin cookie blocking
-      const maxAge = 5 * 24 * 60 * 60; // 5 days in seconds
-      document.cookie = `token=${token}; path=/; max-age=${maxAge}; secure; samesite=none`;
-      router.replace(redirect);
+      localStorage.setItem("auth_token", token);
+      const safeRedirect = redirect.startsWith("/") ? redirect : "/";
+      router.replace(safeRedirect);
     } else {
       router.replace("/login?error=authentication_failed");
     }

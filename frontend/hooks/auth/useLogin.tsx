@@ -15,6 +15,11 @@ export const useLogin = () => {
     mutationFn: async (data) => {
       try {
         const response = await api.post("/api/auth/login", data);
+
+        if (typeof window !== "undefined" && response.data?.token) {
+          localStorage.setItem("auth_token", response.data.token);
+        }
+
         return response.data;
       } catch (err) {
         // Unwrap Axios error → throw a plain Error with the server message
