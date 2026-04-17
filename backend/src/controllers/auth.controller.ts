@@ -238,6 +238,15 @@ export const googleCallback = async (req: Request, res: Response) => {
       },
     );
 
+    // Set cookie on backend domain so it is sent automatically with API requests.
+    // This works in production even when frontend and backend are on different domains.
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 5 * 24 * 60 * 60 * 1000,
+    });
+
     // Get user's first organization
     const userWithOrg = await prisma.user.findUnique({
       where: { id: user.id },
@@ -261,14 +270,7 @@ export const googleCallback = async (req: Request, res: Response) => {
       ? `/organization/${orgSlug}/dashboard`
       : "/";
 
-    // Pass token in URL so the frontend sets the cookie from its own domain.
-    // This avoids cross-origin cookie blocking in production (backend on render.com,
-    // frontend on a different domain).
-    // Note: /callback (not /auth/callback) — the (auth) folder is a Next.js route group
-    // and does NOT appear in the URL.
-    return res.redirect(
-      `${process.env.CORS_ORIGIN}/callback?token=${token}&redirect=${encodeURIComponent(redirectPath)}`,
-    );
+    return res.redirect(`${process.env.CORS_ORIGIN}${redirectPath}`);
   } catch (error) {
     console.error(`error in googleCallback controller: ${error}`);
     return res.redirect(
