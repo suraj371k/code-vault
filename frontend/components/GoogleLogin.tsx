@@ -7,7 +7,7 @@ import { fadeUp } from "@/app/(auth)/login/page";
 
 const GoogleLogin = () => {
   const handleGoogleLogin = () => {
-    window.location.href = `https://code-snippet-backend-1m8g.onrender.com/api/auth/google`;
+    window.location.href = `http://localhost:5001/api/auth/google`;
   };
 
   return (

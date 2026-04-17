@@ -226,12 +226,14 @@ export const googleCallback = async (req: Request, res: Response) => {
 
     if (!user) {
       return res.redirect(
-        `${process.env.CORS_ORIGIN}/login?error=authentication_failed`
+        `${process.env.CORS_ORIGIN}/login?error=authentication_failed`,
       );
     }
 
+    // user here is the raw Prisma user object returned by passport strategy's done(null, user)
+    // it has .id (not .userId), since session: false skips deserializeUser
     const token = jwt.sign(
-      { userId: user.userId, email: user.email },
+      { userId: user.id, email: user.email },
       process.env.JWT_SECRET!,
       {
         expiresIn: "5d",
@@ -248,7 +250,7 @@ export const googleCallback = async (req: Request, res: Response) => {
 
     // Get user's first organization
     const userWithOrg = await prisma.user.findUnique({
-      where: { id: user.userId },
+      where: { id: user.id },
       select: {
         memberships: {
           select: {
@@ -267,7 +269,7 @@ export const googleCallback = async (req: Request, res: Response) => {
 
     if (orgSlug) {
       return res.redirect(
-        `${process.env.CORS_ORIGIN}/organization/${orgSlug}/dashboard`
+        `${process.env.CORS_ORIGIN}/organization/${orgSlug}/dashboard`,
       );
     }
 
@@ -275,7 +277,7 @@ export const googleCallback = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(`error in googleCallback controller: ${error}`);
     return res.redirect(
-      `${process.env.CORS_ORIGIN}/login?error=internal_server_error`
+      `${process.env.CORS_ORIGIN}/login?error=internal_server_error`,
     );
   }
 };

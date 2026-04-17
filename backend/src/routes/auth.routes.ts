@@ -25,7 +25,6 @@ router.get(
   }),
 );
 
-// Google OAuth callback - google redirects here after login
 router.get(
   "/google/callback",
   passport.authenticate("google", {
