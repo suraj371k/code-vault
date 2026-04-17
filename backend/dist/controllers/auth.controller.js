@@ -190,10 +190,11 @@ export const googleCallback = async (req, res) => {
         if (!user) {
             return res.redirect(`${process.env.CORS_ORIGIN}/login?error=authentication_failed`);
         }
-        const token = jwt.sign({ userId: user.userId, email: user.email }, process.env.JWT_SECRET, {
+        const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
             expiresIn: "5d",
         });
-        // Set JWT token in cookies
+        // Set cookie on backend domain so it is sent automatically with API requests.
+        // This works in production even when frontend and backend are on different domains.
         res.cookie("token", token, {
             httpOnly: true,
             secure: true,
@@ -202,7 +203,7 @@ export const googleCallback = async (req, res) => {
         });
         // Get user's first organization
         const userWithOrg = await prisma.user.findUnique({
-            where: { id: user.userId },
+            where: { id: user.id },
             select: {
                 memberships: {
                     select: {
@@ -217,10 +218,10 @@ export const googleCallback = async (req, res) => {
             },
         });
         const orgSlug = userWithOrg?.memberships?.[0]?.organization?.slug;
-        if (orgSlug) {
-            return res.redirect(`${process.env.CORS_ORIGIN}/organization/${orgSlug}/dashboard`);
-        }
-        return res.redirect(`${process.env.CORS_ORIGIN}/`);
+        const redirectPath = orgSlug
+            ? `/organization/${orgSlug}/dashboard`
+            : "/";
+        return res.redirect(`${process.env.CORS_ORIGIN}${redirectPath}`);
     }
     catch (error) {
         console.error(`error in googleCallback controller: ${error}`);

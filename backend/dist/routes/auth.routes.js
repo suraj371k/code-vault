@@ -7,13 +7,13 @@ router.post("/signup", signup);
 router.post("/login", login);
 router.post("/logout", logout);
 router.get("/profile", authMiddleware, profile);
-//  google oauth routes
+// google oauth routes - initiates google login
 router.get("/google", passport.authenticate("google", {
     scope: ["profile", "email"],
+    session: false,
 }));
-// Google OAuth callback
 router.get("/google/callback", passport.authenticate("google", {
-    failureRedirect: "/login",
-    session: true,
+    failureRedirect: `${process.env.CORS_ORIGIN}/login?error=authentication_failed`,
+    session: false,
 }), googleCallback);
 export default router;

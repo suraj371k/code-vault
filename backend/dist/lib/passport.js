@@ -51,29 +51,22 @@ passport.use(new GoogleStrategy({
         return done(error);
     }
 }));
-// serialize user for session
+// since we use JWT we only need serializeUser minimally
 passport.serializeUser((user, done) => {
     done(null, user.id);
 });
-// deserialize user from session
 passport.deserializeUser(async (id, done) => {
     try {
         const user = await prisma.user.findUnique({
-            where: {
-                id: id,
-            },
+            where: { id },
             select: {
                 id: true,
                 email: true,
                 name: true,
-                createdAt: true,
-                googleId: true,
-                password: true,
             },
         });
         if (!user)
-            return done(null, null);
-        // Return user in the format expected by Express User interface
+            return done(null, false);
         const transformedUser = {
             userId: user.id,
             email: user.email,
