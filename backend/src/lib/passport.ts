@@ -63,7 +63,6 @@ passport.use(
   ),
 );
 
-// since we use JWT we only need serializeUser minimally
 passport.serializeUser((user: any, done) => {
   done(null, user.id);
 });
