@@ -14,39 +14,41 @@ function AuthCallbackInner() {
       const token = params.get("token");
       const redirect = params.get("redirect") || "/";
 
-      console.log("OAuth Callback - Token received:", token ? "✓" : "✗");
+      if (!token) {
+        console.error("OAuth Callback - No token received");
+        router.replace("/login?error=authentication_failed");
+        return;
+      }
 
-      if (token) {
+      try {
+        // 1. Persist token FIRST before anything else
+        localStorage.setItem("auth_token", token);
+
+        // 2. Dispatch a storage event so any already-mounted components
+        //    (e.g. useProfile, useOrganizations) know the token is now ready
+        //    and can re-fetch without needing a full page reload.
+        window.dispatchEvent(new StorageEvent("storage", {
+          key: "auth_token",
+          newValue: token,
+          storageArea: localStorage,
+        }));
+
+        // 3. Connect socket with the new token
         try {
-          // Store token in localStorage
-          localStorage.setItem("auth_token", token);
-          
-          // Verify token was stored
-          const storedToken = localStorage.getItem("auth_token");
-          console.log("Token stored successfully:", storedToken ? "✓" : "✗");
-          
-          // Connect socket with authentication token
-          try {
-            connectSocket(token);
-            console.log("Socket connection initiated");
-          } catch (socketError) {
-            console.error("Socket connection failed:", socketError);
-            // Don't block redirect if socket fails
-          }
-          
-          // Small delay to ensure localStorage is synced
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Redirect to the appropriate page
-          const safeRedirect = redirect.startsWith("/") ? redirect : "/";
-          console.log("Redirecting to:", safeRedirect);
-          router.replace(safeRedirect);
-        } catch (error) {
-          console.error("Error during authentication callback:", error);
-          router.replace("/login?error=authentication_failed");
+          connectSocket(token);
+        } catch (socketError) {
+          console.error("Socket connection failed:", socketError);
+          // Don't block the redirect if socket fails
         }
-      } else {
-        console.error("No token received in callback");
+
+        // 4. Give localStorage & event listeners a moment to settle before
+        //    navigating, so the destination page already has the token.
+        await new Promise((resolve) => setTimeout(resolve, 150));
+
+        const safeRedirect = redirect.startsWith("/") ? redirect : "/";
+        router.replace(safeRedirect);
+      } catch (error) {
+        console.error("Error during authentication callback:", error);
         router.replace("/login?error=authentication_failed");
       }
     };

@@ -1,5 +1,6 @@
 import { api } from "@/lib/api";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 
 // Type definitions
 type Plan = "FREE" | "PRO" | "ENTERPRISE";
@@ -45,14 +46,23 @@ interface PaymentActionResponse {
 }
 
 export const useOrganizationPlan = (organizationId?: number) => {
+  // Only run when we have a real, valid numeric org id AND a token
+  const hasToken =
+    typeof window !== "undefined" && !!localStorage.getItem("auth_token");
+
   return useQuery({
     queryKey: ["org-plan", organizationId],
     queryFn: async (): Promise<OrganizationPlanResponse> => {
-      const url = `/api/payment/plan?organizationId=${organizationId}`;
-      const res = await api.get(url);
+      const res = await api.get(
+        `/api/payment/plan?organizationId=${organizationId}`
+      );
       return res.data;
     },
-    enabled: !!organizationId && !isNaN(organizationId),
+    enabled:
+      hasToken &&
+      !!organizationId &&
+      !isNaN(organizationId) &&
+      organizationId > 0,
     retry: 1,
     staleTime: 5 * 60 * 1000,
   });
@@ -68,19 +78,24 @@ export const useCheckout = () => {
       plan: Exclude<Plan, "FREE">;
       organizationId: number;
     }) => {
-      if (!organizationId) {
-        throw new Error("Organization ID is required");
+      // Hard guards – these should never reach the server if invalid
+      if (!organizationId || isNaN(organizationId) || organizationId <= 0) {
+        throw new Error(
+          "Organization not loaded yet. Please wait and try again."
+        );
       }
       if (!plan || (plan !== "PRO" && plan !== "ENTERPRISE")) {
         throw new Error("Valid plan (PRO or ENTERPRISE) is required");
       }
 
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        throw new Error("You must be logged in to purchase a plan.");
+      }
+
       const res = await api.post<CheckoutResponse>(
         "/api/payment/create-checkout-session",
-        {
-          plan,
-          organizationId,
-        },
+        { plan, organizationId }
       );
 
       return res.data;
@@ -89,7 +104,7 @@ export const useCheckout = () => {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        console.error("No checkout URL received");
+        toast.error("No checkout URL received from server.");
       }
     },
     onError: (error: unknown) => {
@@ -99,7 +114,7 @@ export const useCheckout = () => {
       };
       const message =
         err.response?.data?.message || err.message || "Checkout failed";
-      console.error("Checkout error:", message);
+      toast.error(message);
     },
   });
 };
@@ -107,13 +122,13 @@ export const useCheckout = () => {
 export const useCancelSubscription = () => {
   return useMutation({
     mutationFn: async ({ organizationId }: { organizationId: number }) => {
-      if (!organizationId) {
+      if (!organizationId || isNaN(organizationId)) {
         throw new Error("Organization ID is required");
       }
 
       const res = await api.post<PaymentActionResponse>(
         "/api/payment/cancel-subscription",
-        { organizationId },
+        { organizationId }
       );
 
       return res.data;
@@ -124,8 +139,10 @@ export const useCancelSubscription = () => {
         message?: string;
       };
       const message =
-        err.response?.data?.message || err.message || "Failed to cancel subscription";
-      console.error("Cancel subscription error:", message);
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to cancel subscription";
+      toast.error(message);
     },
   });
 };
@@ -141,12 +158,9 @@ export const useUpgradePlan = () => {
     }) => {
       const res = await api.put(
         `/api/organizations/${organizationId}/upgrade`,
-        { plan },
+        { plan }
       );
       return res.data;
-    },
-    onSuccess: (data) => {
-      console.log("Plan upgraded successfully:", data);
     },
   });
 };

@@ -2,46 +2,68 @@
 
 import { useOrganizations } from "@/hooks/organization/useOrganizations";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function SuccessPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: orgs, isPending } = useOrganizations();
   const [seconds, setSeconds] = useState(5);
 
-  // BUG 4 FIX: Read the org slug that was saved to localStorage before checkout.
-  // This ensures we redirect back to the correct org's billing page,
-  // not always orgs[0] which could be a different organization.
-  const getBillingSlug = () => {
-    const saved = localStorage.getItem("lastPaidOrgSlug");
-    if (saved) return saved;
-    return orgs?.[0]?.slug ?? null;
-  };
+  // Resolve billing slug once and store in a ref so it's stable across renders
+  const billingSlugRef = useRef<string | null>(null);
 
+  // Invalidate the plan cache so billing page shows the new plan immediately
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["org-plan"] });
+    queryClient.invalidateQueries({ queryKey: ["Organizations"] });
+  }, [queryClient]);
+
+  // Resolve the slug when orgs are ready
+  useEffect(() => {
+    if (isPending || !orgs?.length) return;
+    const saved = localStorage.getItem("lastPaidOrgSlug");
+    billingSlugRef.current = saved ?? orgs[0]?.slug ?? null;
+  }, [orgs, isPending]);
+
+  // Countdown — router.push lives OUTSIDE the state updater to avoid the
+  // "setState during render" error in Next.js 15.
   useEffect(() => {
     if (isPending || !orgs?.length) return;
 
-    const slug = getBillingSlug();
-    if (!slug) return;
-
-    const countdown = setInterval(() => {
-      setSeconds((s) => {
-        if (s <= 1) {
-          clearInterval(countdown);
-          // Clean up the stored slug after use
-          localStorage.removeItem("lastPaidOrgSlug");
-          router.push(`/organization/${slug}/dashboard/billing`);
+    const interval = setInterval(() => {
+      setSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0; // just update state; navigation is handled below
         }
-        return s - 1;
+        return prev - 1;
       });
     }, 1000);
 
-    return () => clearInterval(countdown);
-  }, [orgs, isPending, router]);
+    return () => clearInterval(interval);
+  }, [orgs, isPending]);
 
-  const billingSlug = !isPending ? getBillingSlug() : null;
+  // Navigate once the counter reaches zero — this runs in useEffect, never in render
+  useEffect(() => {
+    if (seconds === 0 && billingSlugRef.current) {
+      localStorage.removeItem("lastPaidOrgSlug");
+      router.push(`/organization/${billingSlugRef.current}/dashboard/billing`);
+    }
+  }, [seconds, router]);
+
+  // Derive slug for the manual "Go to Dashboard" button
+  const billingSlug = billingSlugRef.current;
+
+  function handleManualRedirect() {
+    const slug = billingSlug;
+    if (!slug) return;
+    localStorage.removeItem("lastPaidOrgSlug");
+    router.push(`/organization/${slug}/dashboard/billing`);
+  }
 
   return (
     <div
@@ -72,7 +94,8 @@ export default function SuccessPage() {
         style={{
           background: "rgba(10,10,15,0.95)",
           borderColor: "rgba(20,184,166,0.2)",
-          boxShadow: "0 0 60px rgba(20,184,166,0.12), 0 0 0 1px rgba(20,184,166,0.08)",
+          boxShadow:
+            "0 0 60px rgba(20,184,166,0.12), 0 0 0 1px rgba(20,184,166,0.08)",
         }}
       >
         {/* Success icon */}
@@ -82,7 +105,8 @@ export default function SuccessPage() {
           transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 15 }}
           className="flex items-center justify-center mx-auto size-20 rounded-full"
           style={{
-            background: "linear-gradient(135deg, rgba(20,184,166,0.2), rgba(45,212,191,0.1))",
+            background:
+              "linear-gradient(135deg, rgba(20,184,166,0.2), rgba(45,212,191,0.1))",
             boxShadow: "0 0 40px rgba(20,184,166,0.3)",
             border: "1.5px solid rgba(20,184,166,0.35)",
           }}
@@ -106,8 +130,8 @@ export default function SuccessPage() {
             transition={{ delay: 0.38, duration: 0.4 }}
             className="text-sm text-zinc-400 leading-relaxed"
           >
-            Your organization's subscription has been activated. You now have
-            access to all features included in your plan.
+            Your organization&apos;s subscription has been activated. You now
+            have access to all features included in your plan.
           </motion.p>
         </div>
 
@@ -118,16 +142,18 @@ export default function SuccessPage() {
           transition={{ delay: 0.5 }}
           className="flex items-center justify-center gap-2 flex-wrap"
         >
-          {["Unlimited Snippets", "Team Collaboration", "AI Features"].map((f) => (
-            <span
-              key={f}
-              className="inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1 rounded-full"
-              style={{ background: "rgba(20,184,166,0.1)", color: "#2dd4bf" }}
-            >
-              <Sparkles className="size-3" />
-              {f}
-            </span>
-          ))}
+          {["Unlimited Snippets", "Team Collaboration", "AI Features"].map(
+            (f) => (
+              <span
+                key={f}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1 rounded-full"
+                style={{ background: "rgba(20,184,166,0.1)", color: "#2dd4bf" }}
+              >
+                <Sparkles className="size-3" />
+                {f}
+              </span>
+            )
+          )}
         </motion.div>
 
         {/* Redirect info */}
@@ -140,19 +166,19 @@ export default function SuccessPage() {
           <p className="text-xs text-zinc-500">
             {isPending ? (
               <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="size-3 animate-spin" /> Loading...
+                <Loader2 className="size-3 animate-spin" /> Loading…
               </span>
             ) : (
-              <>Redirecting to your dashboard in <span className="text-teal-400 font-semibold">{seconds}s</span></>
+              <>
+                Redirecting to your dashboard in{" "}
+                <span className="text-teal-400 font-semibold">{seconds}s</span>
+              </>
             )}
           </p>
 
           {billingSlug && (
             <button
-              onClick={() => {
-                localStorage.removeItem("lastPaidOrgSlug");
-                router.push(`/organization/${billingSlug}/dashboard/billing`);
-              }}
+              onClick={handleManualRedirect}
               className="inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-200"
               style={{
                 background: "linear-gradient(135deg, #0f766e, #0d9488)",
