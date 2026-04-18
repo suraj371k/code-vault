@@ -1,27 +1,8 @@
 import { api } from "@/lib/api";
 import { Organizations } from "@/types/organization";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-
-/** Returns true only after we've confirmed a token exists in localStorage. */
-function useHasToken() {
-  const [hasToken, setHasToken] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return !!localStorage.getItem("auth_token");
-  });
-
-  useEffect(() => {
-    const handler = (e: StorageEvent) => {
-      if (e.key === "auth_token") {
-        setHasToken(!!e.newValue);
-      }
-    };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, []);
-
-  return hasToken;
-}
+import { useEffect } from "react";
+import { useHasToken } from "@/hooks/useHasToken";
 
 export const useOrganizations = () => {
   const hasToken = useHasToken();

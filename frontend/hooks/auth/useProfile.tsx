@@ -3,29 +3,8 @@
 import { api } from "@/lib/api";
 import { User } from "@/types/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-
-/** Returns true only after we've confirmed a token exists in localStorage. */
-function useHasToken() {
-  const [hasToken, setHasToken] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return !!localStorage.getItem("auth_token");
-  });
-
-  useEffect(() => {
-    // Listen for the StorageEvent fired by the OAuth callback page so we
-    // can enable the query without a full page reload.
-    const handler = (e: StorageEvent) => {
-      if (e.key === "auth_token") {
-        setHasToken(!!e.newValue);
-      }
-    };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, []);
-
-  return hasToken;
-}
+import { useEffect } from "react";
+import { useHasToken } from "@/hooks/useHasToken";
 
 export const useProfile = () => {
   const hasToken = useHasToken();
@@ -47,7 +26,6 @@ export const useProfile = () => {
     },
     // Don't fire at all until we know a token is present
     enabled: hasToken,
-    // Keep data fresh for 5 minutes; profile rarely changes mid-session
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

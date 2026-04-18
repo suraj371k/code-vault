@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import { SnippetResponse } from "@/types/snippets";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useHasToken } from "@/hooks/useHasToken";
 
 interface UseSnippetsParams {
   organizationId: number;
@@ -13,6 +14,8 @@ export const useSnippets = ({
   page = 1,
   search,
 }: UseSnippetsParams) => {
+  const hasToken = useHasToken();
+
   return useQuery<SnippetResponse, Error>({
     queryKey: ["get-snippets", organizationId, page, search],
     queryFn: async () => {
@@ -25,7 +28,7 @@ export const useSnippets = ({
       return res.data;
     },
     placeholderData: keepPreviousData,
-    enabled: !!organizationId,
+    enabled: hasToken && !!organizationId,
     staleTime: 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });

@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import { useHasToken } from "@/hooks/useHasToken";
 
 // Type definitions
 type Plan = "FREE" | "PRO" | "ENTERPRISE";
@@ -46,9 +47,7 @@ interface PaymentActionResponse {
 }
 
 export const useOrganizationPlan = (organizationId?: number) => {
-  // Only run when we have a real, valid numeric org id AND a token
-  const hasToken =
-    typeof window !== "undefined" && !!localStorage.getItem("auth_token");
+  const hasToken = useHasToken();
 
   return useQuery({
     queryKey: ["org-plan", organizationId],
@@ -58,6 +57,7 @@ export const useOrganizationPlan = (organizationId?: number) => {
       );
       return res.data;
     },
+    // Fire only when token is present AND organizationId is a valid positive number
     enabled:
       hasToken &&
       !!organizationId &&
@@ -78,7 +78,6 @@ export const useCheckout = () => {
       plan: Exclude<Plan, "FREE">;
       organizationId: number;
     }) => {
-      // Hard guards – these should never reach the server if invalid
       if (!organizationId || isNaN(organizationId) || organizationId <= 0) {
         throw new Error(
           "Organization not loaded yet. Please wait and try again."

@@ -5,6 +5,10 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// Paths that are expected to be called without a token (public endpoints).
+// Requests to these paths will NOT log a warning when no token is present.
+const PUBLIC_PATHS = ["/api/auth/login", "/api/auth/signup", "/api/auth/google"];
+
 // Request interceptor: attach JWT from localStorage on every request
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -20,7 +24,13 @@ api.interceptors.request.use(
           `Bearer ${token}`
         );
       } else {
-        console.warn("API Request without token:", config.url);
+        // Only warn for protected endpoints — suppress noise for public ones
+        const isPublic = PUBLIC_PATHS.some((p) =>
+          config.url?.includes(p)
+        );
+        if (!isPublic) {
+          console.warn("API Request without token:", config.url);
+        }
       }
     }
     return config;
@@ -39,8 +49,12 @@ api.interceptors.response.use(
           window.location.pathname.includes("/signup") ||
           window.location.pathname.includes("/callback");
 
-        // Only clear + redirect if we're NOT already on an auth page
-        if (!isAuthPage) {
+        const isPaymentPage =
+          window.location.pathname.includes("/success") ||
+          window.location.pathname.includes("/cancel");
+
+        // Only clear + redirect if we're NOT already on an auth or payment page
+        if (!isAuthPage && !isPaymentPage) {
           localStorage.removeItem("auth_token");
           window.location.href = "/login?error=session_expired";
         }

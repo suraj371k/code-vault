@@ -2,8 +2,11 @@
 import { api } from "@/lib/api";
 import { Snippet } from "@/types/snippets";
 import { useQuery } from "@tanstack/react-query";
+import { useHasToken } from "@/hooks/useHasToken";
 
 export const useFavSnippets = (organizationId: number | null) => {
+  const hasToken = useHasToken();
+
   return useQuery<Snippet[], Error>({
     queryKey: ["fav-snippets", organizationId],
     queryFn: async () => {
@@ -13,10 +16,9 @@ export const useFavSnippets = (organizationId: number | null) => {
           params: { isFav: true, limit: 1000 },
         },
       );
-      // Support both { data: [...] } and plain array responses
       const raw = res.data?.data ?? res.data;
       return (raw as Snippet[]).filter((s: Snippet) => s.isFav);
     },
-    enabled: !!organizationId,
+    enabled: hasToken && !!organizationId,
   });
 };
