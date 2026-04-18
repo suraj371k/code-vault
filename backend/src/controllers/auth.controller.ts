@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { generateUniqueSlug } from "./organization.controller.js";
+import { getCookieConfig } from "../lib/cookieConfig.js";
 
 export const signup = async (req: Request, res: Response) => {
   try {
@@ -68,12 +69,7 @@ export const signup = async (req: Request, res: Response) => {
       },
     );
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      maxAge: 5 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("token", token, getCookieConfig());
 
     return res.status(201).json({
       success: true,
@@ -132,12 +128,7 @@ export const login = async (req: Request, res: Response) => {
     );
 
     //set cookies
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      maxAge: 5 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("token", token, getCookieConfig());
 
     const { password: _, ...userWithoutPassword } = user;
 
@@ -158,9 +149,7 @@ export const login = async (req: Request, res: Response) => {
 export const logout = async (req: Request, res: Response) => {
   try {
     res.clearCookie("token", {
-      secure: true,
-      httpOnly: true,
-      sameSite: "none",
+      ...getCookieConfig(),
       maxAge: 0,
     });
 
@@ -228,7 +217,10 @@ export const googleCallback = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
 
+    console.log("Google OAuth callback - User authenticated:", !!user);
+
     if (!user) {
+      console.error("Google OAuth callback - No user found");
       return res.redirect(
         `${process.env.CORS_ORIGIN}/login?error=authentication_failed`,
       );
@@ -242,12 +234,9 @@ export const googleCallback = async (req: Request, res: Response) => {
       },
     );
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      maxAge: 5 * 24 * 60 * 60 * 1000,
-    });
+    console.log("Google OAuth callback - Token generated for user:", user.id);
+
+    res.cookie("token", token, getCookieConfig());
 
     // Get user's first organization
     const userWithOrg = await prisma.user.findUnique({
@@ -267,12 +256,13 @@ export const googleCallback = async (req: Request, res: Response) => {
     });
 
     const orgSlug = userWithOrg?.memberships?.[0]?.organization?.slug;
-
     const redirectPath = orgSlug ? `/organization/${orgSlug}/dashboard` : "/";
 
-    return res.redirect(
-      `${process.env.CORS_ORIGIN}/callback?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectPath)}`,
-    );
+    const callbackUrl = `${process.env.CORS_ORIGIN}/callback?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectPath)}`;
+    
+    console.log("Google OAuth callback - Redirecting to:", callbackUrl);
+
+    return res.redirect(callbackUrl);
   } catch (error) {
     console.error(`error in googleCallback controller: ${error}`);
     return res.redirect(

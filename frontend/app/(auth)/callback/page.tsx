@@ -10,27 +10,48 @@ function AuthCallbackInner() {
   const params = useSearchParams();
 
   useEffect(() => {
-    const token = params.get("token");
-    const redirect = params.get("redirect") || "/";
+    const handleCallback = async () => {
+      const token = params.get("token");
+      const redirect = params.get("redirect") || "/";
 
-    if (token) {
-      try {
-        // Store token in localStorage
-        localStorage.setItem("auth_token", token);
-        
-        // Connect socket with authentication token
-        connectSocket(token);
-        
-        // Redirect to the appropriate page
-        const safeRedirect = redirect.startsWith("/") ? redirect : "/";
-        router.replace(safeRedirect);
-      } catch (error) {
-        console.error("Error during authentication callback:", error);
+      console.log("OAuth Callback - Token received:", token ? "✓" : "✗");
+
+      if (token) {
+        try {
+          // Store token in localStorage
+          localStorage.setItem("auth_token", token);
+          
+          // Verify token was stored
+          const storedToken = localStorage.getItem("auth_token");
+          console.log("Token stored successfully:", storedToken ? "✓" : "✗");
+          
+          // Connect socket with authentication token
+          try {
+            connectSocket(token);
+            console.log("Socket connection initiated");
+          } catch (socketError) {
+            console.error("Socket connection failed:", socketError);
+            // Don't block redirect if socket fails
+          }
+          
+          // Small delay to ensure localStorage is synced
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Redirect to the appropriate page
+          const safeRedirect = redirect.startsWith("/") ? redirect : "/";
+          console.log("Redirecting to:", safeRedirect);
+          router.replace(safeRedirect);
+        } catch (error) {
+          console.error("Error during authentication callback:", error);
+          router.replace("/login?error=authentication_failed");
+        }
+      } else {
+        console.error("No token received in callback");
         router.replace("/login?error=authentication_failed");
       }
-    } else {
-      router.replace("/login?error=authentication_failed");
-    }
+    };
+
+    handleCallback();
   }, [params, router]);
 
   return (
