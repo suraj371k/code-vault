@@ -1,6 +1,7 @@
-﻿import { Server } from "socket.io";
+import { Server } from "socket.io";
 import { Server as HttpServer } from "http";
 import { prisma } from "./prisma.js";
+import jwt from "jsonwebtoken";
 
 let io: Server;
 
@@ -12,14 +13,52 @@ export const initSocket = (httpServer: HttpServer) => {
     cors: {
       origin: process.env.CORS_ORIGIN || "http://localhost:3000",
       methods: ["GET", "POST"],
+      credentials: true, // Added credentials support
     },
   });
 
+  // Add authentication middleware for socket connections
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth.token;
+
+      if (!token) {
+        console.log("Socket connection attempted without token");
+        return next(new Error("Authentication error: No token provided"));
+      }
+
+      // Verify JWT token
+      jwt.verify(token, process.env.JWT_SECRET!, (err: any, decoded: any) => {
+        if (err) {
+          console.log("Socket authentication failed:", err.message);
+          return next(new Error("Authentication error: Invalid token"));
+        }
+
+        // Store user data in socket
+        socket.data.userId = (decoded as any).userId;
+        socket.data.email = (decoded as any).email;
+        console.log(`Socket authenticated for user: ${socket.data.userId}`);
+        next();
+      });
+    } catch (error) {
+      console.error("Socket authentication error:", error);
+      next(new Error("Authentication error"));
+    }
+  });
+
   io.on("connection", (socket) => {
-    console.log(`user connected ${socket.id}`);
+    console.log(`User connected: ${socket.id}, userId: ${socket.data.userId}`);
 
     // each user joins their own room
     socket.on("join", async (userId: number) => {
+      // Verify the userId matches the authenticated user
+      if (socket.data.userId !== userId) {
+        console.log(
+          `User ${socket.data.userId} attempted to join room for user ${userId}`,
+        );
+        return;
+      }
+
       socket.join(`user:${userId}`);
 
       // Track this socket connection

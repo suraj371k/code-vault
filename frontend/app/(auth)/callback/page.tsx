@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { connectSocket } from "@/lib/socket";
 
 function AuthCallbackInner() {
   const router = useRouter();
@@ -13,9 +14,20 @@ function AuthCallbackInner() {
     const redirect = params.get("redirect") || "/";
 
     if (token) {
-      localStorage.setItem("auth_token", token);
-      const safeRedirect = redirect.startsWith("/") ? redirect : "/";
-      router.replace(safeRedirect);
+      try {
+        // Store token in localStorage
+        localStorage.setItem("auth_token", token);
+        
+        // Connect socket with authentication token
+        connectSocket(token);
+        
+        // Redirect to the appropriate page
+        const safeRedirect = redirect.startsWith("/") ? redirect : "/";
+        router.replace(safeRedirect);
+      } catch (error) {
+        console.error("Error during authentication callback:", error);
+        router.replace("/login?error=authentication_failed");
+      }
     } else {
       router.replace("/login?error=authentication_failed");
     }

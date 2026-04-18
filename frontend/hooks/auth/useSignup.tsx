@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "@/lib/api";
+import { connectSocket } from "@/lib/socket";
 import { User } from "@/types/auth";
 import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
@@ -19,6 +20,14 @@ export function useSignup() {
 
         if (typeof window !== "undefined" && response.data?.token) {
           localStorage.setItem("auth_token", response.data.token);
+          
+          // Connect socket with authentication token
+          try {
+            connectSocket(response.data.token);
+          } catch (socketError) {
+            console.error("Failed to connect socket:", socketError);
+            // Don't fail the signup if socket connection fails
+          }
         }
 
         return response.data;
