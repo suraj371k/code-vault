@@ -21,21 +21,41 @@ export const useAiChat = (snippetId: number, snippetTitle: string) => {
     setMessages((m) => [...m, { role: "user", text }]);
     setLoading(true);
 
-    // Add empty AI message to stream into
+    // Add empty AI message placeholder to stream into
     setMessages((m) => [...m, { role: "ai", text: "" }]);
 
     abortRef.current = new AbortController();
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/${snippetId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ question: text }),
-        signal: abortRef.current.signal,
-      });
+      // Build headers — always attach the JWT token so this works in production
+      // where cross-origin cookies are blocked. Fall back to cookie-only if no
+      // token is found (local dev without localStorage).
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
 
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      if (typeof window !== "undefined") {
+        const token = localStorage.getItem("auth_token");
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+      }
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/ai/${snippetId}`,
+        {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({ question: text }),
+          signal: abortRef.current.signal,
+        }
+      );
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        throw new Error(`Server error: ${res.status} ${errorText}`);
+      }
 
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
@@ -55,22 +75,40 @@ export const useAiChat = (snippetId: number, snippetTitle: string) => {
           if (raw === "[DONE]") break;
 
           try {
-            const { text: chunk } = JSON.parse(raw) as { text: string };
-            setMessages((m) => {
-              const updated = [...m];
-              updated[updated.length - 1] = {
-                role: "ai",
-                text: updated[updated.length - 1].text + chunk,
-              };
-              return updated;
-            });
+            const parsed = JSON.parse(raw) as { text?: string; error?: string };
+
+            // Handle error events sent from the backend stream
+            if (parsed.error) {
+              setMessages((m) => {
+                const updated = [...m];
+                updated[updated.length - 1] = {
+                  role: "ai",
+                  text: `⚠️ ${parsed.error}`,
+                };
+                return updated;
+              });
+              return;
+            }
+
+            if (parsed.text) {
+              setMessages((m) => {
+                const updated = [...m];
+                updated[updated.length - 1] = {
+                  role: "ai",
+                  text: updated[updated.length - 1].text + parsed.text,
+                };
+                return updated;
+              });
+            }
           } catch {
-            // ignore malformed chunks
+            // ignore malformed SSE chunks
           }
         }
       }
     } catch (err: unknown) {
       if ((err as Error).name === "AbortError") return;
+
+      console.error("AI chat error:", err);
       setMessages((m) => {
         const updated = [...m];
         updated[updated.length - 1] = {
