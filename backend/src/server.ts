@@ -46,8 +46,9 @@ app.use(passport.initialize());
 // passport.session() lets req.isAuthenticated() work for session-based OAuth flows
 app.use(passport.session());
 
-app.use(express.json());
+// CORS must be before express.json() so preflight OPTIONS requests are handled correctly
 app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+app.use(express.json());
 app.use(cookieParser());
 
 //health route

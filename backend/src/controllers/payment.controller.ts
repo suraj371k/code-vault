@@ -3,6 +3,22 @@ import { prisma } from "../lib/prisma.js";
 import Stripe from "stripe";
 import { PLAN_LIMITS } from "../config/planLimits.js";
 
+// Fail fast at startup if critical Stripe env vars are missing
+const missingEnvVars = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_PRICE_PRO",
+  "STRIPE_PRICE_ENTERPRISE",
+  "STRIPE_WEBHOOK_SECRET",
+  "CORS_ORIGIN",
+].filter((key) => !process.env[key]);
+
+if (missingEnvVars.length > 0) {
+  console.error(
+    `[payment.controller] FATAL: Missing required environment variables: ${missingEnvVars.join(", ")}`,
+  );
+  process.exit(1);
+}
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 const PLANS = {
@@ -496,7 +512,12 @@ export const handleWebHook = async (req: Request, res: Response) => {
 
 export const getOrganizationPlan = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    // FIX: use optional chaining — crashes with 500 if auth middleware fails silently
+    const userId = (req as any).user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
 
     const organizationId =
       Number(req.headers["x-organization-id"]) ||

@@ -27,9 +27,6 @@ export const useAiChat = (snippetId: number, snippetTitle: string) => {
     abortRef.current = new AbortController();
 
     try {
-      // Build headers — always attach the JWT token so this works in production
-      // where cross-origin cookies are blocked. Fall back to cookie-only if no
-      // token is found (local dev without localStorage).
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
@@ -49,7 +46,7 @@ export const useAiChat = (snippetId: number, snippetTitle: string) => {
           credentials: "include",
           body: JSON.stringify({ question: text }),
           signal: abortRef.current.signal,
-        }
+        },
       );
 
       if (!res.ok) {
