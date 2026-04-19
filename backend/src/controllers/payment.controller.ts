@@ -1,117 +1,66 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
-import Stripe from "stripe";
+import Razorpay from "razorpay";
+import crypto from "crypto";
 import { PLAN_LIMITS } from "../config/planLimits.js";
 
-// Fail fast at startup if critical Stripe env vars are missing
-const missingEnvVars = [
-  "STRIPE_SECRET_KEY",
-  "STRIPE_PRICE_PRO",
-  "STRIPE_PRICE_ENTERPRISE",
-  "STRIPE_WEBHOOK_SECRET",
-  "CORS_ORIGIN",
-].filter((key) => !process.env[key]);
+// Razorpay client
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID!,
+  key_secret: process.env.RAZORPAY_KEY_SECRET!,
+});
 
-if (missingEnvVars.length > 0) {
-  console.error(
-    `[payment.controller] FATAL: Missing required environment variables: ${missingEnvVars.join(", ")}`,
-  );
-  process.exit(1);
-}
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
+//  Plan config
 const PLANS = {
   pro: {
-    priceId: process.env.STRIPE_PRICE_PRO!,
+    planId: process.env.RAZORPAY_PLAN_PRO!,
     name: "Pro Plan",
-    amount: 10,
+    amount: 8000,
     planEnum: "PRO" as const,
   },
   enterprise: {
-    priceId: process.env.STRIPE_PRICE_ENTERPRISE!,
+    planId: process.env.RAZORPAY_PLAN_ENTERPRISE!,
     name: "Enterprise Plan",
-    amount: 25,
+    amount: 2000,
     planEnum: "ENTERPRISE" as const,
   },
 };
 
-// Helper to safely get expiry date from subscription
-const getExpiryDate = (subscription: Stripe.Subscription): Date | null => {
-  try {
-    const end =
-      (subscription as any).current_period_end ??
-      subscription.items?.data?.[0]?.current_period_end;
-
-    if (!end || isNaN(Number(end))) return null;
-
-    const date = new Date(Number(end) * 1000);
-    if (isNaN(date.getTime())) return null;
-
-    return date;
-  } catch {
-    return null;
-  }
-};
-
-// Helper to handle invoice payment renewal logic
-const handleInvoiceRenewal = async (subscriptionId: string) => {
-  if (!subscriptionId) return;
-
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  const orgId = Number(subscription.metadata.organizationId);
-
-  if (!orgId || isNaN(orgId)) {
-    console.log("Skipping renewal — no orgId in metadata");
-    return;
-  }
-
-  const expiryDate = getExpiryDate(subscription);
-
-  await prisma.organization.update({
-    where: { id: orgId },
-    data: {
-      subscriptionStatus: "ACTIVE",
-      ...(expiryDate && { planExpiresAt: expiryDate }),
-    },
-  });
-
-  console.log(` Renewal successful for organization ${orgId}`);
-};
-
-// Create Checkout Session
+// CREATE SUBSCRIPTION
 export const createPayment = async (req: Request, res: Response) => {
   try {
     const { plan, organizationId } = req.body;
     const requesterId = Number((req as any).user?.userId);
     const parsedOrganizationId = Number(organizationId);
 
-    // Guard: must be authenticated
     if (!requesterId || isNaN(requesterId)) {
       return res
         .status(401)
         .json({ success: false, message: "Not authenticated" });
     }
 
-    // Guard: organizationId must be a valid number
-    if (!parsedOrganizationId || isNaN(parsedOrganizationId) || parsedOrganizationId <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid organization ID is required",
-      });
+    if (
+      !parsedOrganizationId ||
+      isNaN(parsedOrganizationId) ||
+      parsedOrganizationId <= 0
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
     }
 
-    // Normalize plan key to lowercase so "PRO"/"ENTERPRISE" from frontend maps correctly
     const planKey = (plan as string)?.toLowerCase() as keyof typeof PLANS;
     const selectedPlan = PLANS[planKey];
 
     if (!selectedPlan) {
-      return res.status(400).json({ success: false, message: "Invalid plan. Must be 'pro' or 'enterprise'." });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid plan. Must be 'pro' or 'enterprise'.",
+      });
     }
 
-    // Guard: env var must be set – catch missing Stripe price IDs before calling Stripe
-    if (!selectedPlan.priceId) {
-      console.error(`Missing Stripe price ID for plan: ${planKey}`);
+    if (!selectedPlan.planId) {
+      console.error(`Missing Razorpay plan ID for: ${planKey}`);
       return res.status(500).json({
         success: false,
         message: "Payment configuration error. Please contact support.",
@@ -121,7 +70,6 @@ export const createPayment = async (req: Request, res: Response) => {
     const org = await prisma.organization.findUnique({
       where: { id: parsedOrganizationId },
     });
-
     if (!org) {
       return res
         .status(404)
@@ -135,7 +83,6 @@ export const createPayment = async (req: Request, res: Response) => {
         role: "OWNER",
       },
     });
-
     if (!ownerMembership) {
       return res.status(403).json({
         success: false,
@@ -143,45 +90,35 @@ export const createPayment = async (req: Request, res: Response) => {
       });
     }
 
-    const sessionParams: Stripe.Checkout.SessionCreateParams = {
-      mode: "subscription",
-      client_reference_id: String(parsedOrganizationId),
-      line_items: [{ price: selectedPlan.priceId, quantity: 1 }],
-      subscription_data: {
-        metadata: {
-          organizationId: String(parsedOrganizationId),
-          plan: planKey,
-        },
+    // Fetch user email for prefilling the Razorpay modal
+    const user = await prisma.user.findUnique({
+      where: { id: requesterId },
+      select: { email: true, name: true },
+    });
+
+    // Create a Razorpay Subscription
+    const subscription = await razorpay.subscriptions.create({
+      plan_id: selectedPlan.planId,
+      customer_notify: 1,
+      quantity: 1,
+      total_count: 12,
+      notes: {
+        organizationId: String(parsedOrganizationId),
+        plan: planKey,
+        userId: String(requesterId),
       },
-      success_url: `${process.env.CORS_ORIGIN}/success`,
-      cancel_url: `${process.env.CORS_ORIGIN}/pricing`,
-    };
+    });
 
-    if (org.stripeCustomerId) {
-      // Returning customer — attach to existing Stripe customer
-      sessionParams.customer = org.stripeCustomerId;
-    } else {
-      // New customer — use email from req.user; fall back to org owner lookup
-      const userEmail = (req as any).user?.email;
-
-      if (userEmail) {
-        sessionParams.customer_email = userEmail;
-      } else {
-        // Fetch email from DB as a safety net (Google OAuth users always have email)
-        const user = await prisma.user.findUnique({
-          where: { id: requesterId },
-          select: { email: true },
-        });
-        if (user?.email) {
-          sessionParams.customer_email = user.email;
-        }
-        // If still no email, Stripe will let the customer enter it in checkout
-      }
-    }
-
-    const session = await stripe.checkout.sessions.create(sessionParams);
-
-    return res.json({ success: true, url: session.url });
+    return res.json({
+      success: true,
+      subscriptionId: subscription.id,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      prefill: {
+        email: user?.email ?? "",
+        name: user?.name ?? "",
+      },
+      organizationName: org.name,
+    });
   } catch (error) {
     console.error("Error creating payment:", error);
     return res
@@ -190,20 +127,100 @@ export const createPayment = async (req: Request, res: Response) => {
   }
 };
 
+// VERIFY PAYMENT
+export const verifyPayment = async (req: Request, res: Response) => {
+  try {
+    const {
+      razorpay_payment_id,
+      razorpay_subscription_id,
+      razorpay_signature,
+      organizationId,
+      plan,
+    } = req.body;
+
+    const requesterId = Number((req as any).user?.userId);
+    const parsedOrganizationId = Number(organizationId);
+
+    if (!requesterId || isNaN(requesterId)) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authenticated" });
+    }
+
+    if (
+      !razorpay_payment_id ||
+      !razorpay_subscription_id ||
+      !razorpay_signature
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing payment verification fields",
+      });
+    }
+
+    const body = `${razorpay_payment_id}|${razorpay_subscription_id}`;
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+      .update(body)
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification failed: invalid signature",
+      });
+    }
+
+    const planKey = (plan as string)?.toLowerCase() as keyof typeof PLANS;
+    const selectedPlan = PLANS[planKey];
+
+    if (!selectedPlan) {
+      return res.status(400).json({ success: false, message: "Invalid plan" });
+    }
+
+    // Activate subscription in DB
+    await prisma.organization.update({
+      where: { id: parsedOrganizationId },
+      data: {
+        plan: selectedPlan.planEnum,
+        subscriptionId: razorpay_subscription_id,
+        subscriptionStatus: "ACTIVE",
+        planExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 days
+      },
+    });
+
+    console.log(
+      `Subscription verified & activated for org ${parsedOrganizationId} — plan: ${selectedPlan.planEnum}`,
+    );
+
+    return res.json({
+      success: true,
+      message: "Payment verified successfully",
+    });
+  } catch (error) {
+    console.error("Error verifying payment:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+// CANCEL SUBSCRIPTION
 export const cancelSubscription = async (req: Request, res: Response) => {
   try {
     const requesterId = Number((req as any).user?.userId);
     const parsedOrganizationId = Number(req.body.organizationId);
 
     if (!requesterId || isNaN(requesterId)) {
-      return res.status(401).json({ success: false, message: "Not authenticated" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authenticated" });
     }
 
     if (!parsedOrganizationId || isNaN(parsedOrganizationId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid organization ID is required",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
     }
 
     const ownerMembership = await prisma.membership.findFirst({
@@ -213,7 +230,6 @@ export const cancelSubscription = async (req: Request, res: Response) => {
         role: "OWNER",
       },
     });
-
     if (!ownerMembership) {
       return res.status(403).json({
         success: false,
@@ -223,11 +239,7 @@ export const cancelSubscription = async (req: Request, res: Response) => {
 
     const org = await prisma.organization.findUnique({
       where: { id: parsedOrganizationId },
-      select: {
-        id: true,
-        plan: true,
-        subscriptionId: true,
-      },
+      select: { id: true, plan: true, subscriptionId: true },
     });
 
     if (!org) {
@@ -237,13 +249,13 @@ export const cancelSubscription = async (req: Request, res: Response) => {
     }
 
     if (!org.subscriptionId || org.plan === "FREE") {
-      return res.status(400).json({
-        success: false,
-        message: "No active paid subscription found for this organization",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "No active paid subscription found" });
     }
 
-    await stripe.subscriptions.cancel(org.subscriptionId);
+    // Cancel at period end in Razorpay (cancel_at_cycle_end = 1)
+    await razorpay.subscriptions.cancel(org.subscriptionId, true);
 
     await prisma.organization.update({
       where: { id: parsedOrganizationId },
@@ -266,29 +278,32 @@ export const cancelSubscription = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error canceling subscription:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
+// UPDATE SUBSCRIPTION PLAN
 export const updateSubscriptionPlan = async (req: Request, res: Response) => {
   try {
     const requesterId = Number((req as any).user?.userId);
     const parsedOrganizationId = Number(req.body.organizationId);
-    const planKey = (req.body.plan as string)?.toLowerCase() as keyof typeof PLANS;
+    const planKey = (
+      req.body.plan as string
+    )?.toLowerCase() as keyof typeof PLANS;
     const selectedPlan = PLANS[planKey];
 
     if (!requesterId || isNaN(requesterId)) {
-      return res.status(401).json({ success: false, message: "Not authenticated" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authenticated" });
     }
 
     if (!parsedOrganizationId || isNaN(parsedOrganizationId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid organization ID is required",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid organization ID is required" });
     }
 
     if (!selectedPlan) {
@@ -302,7 +317,6 @@ export const updateSubscriptionPlan = async (req: Request, res: Response) => {
         role: "OWNER",
       },
     });
-
     if (!ownerMembership) {
       return res.status(403).json({
         success: false,
@@ -312,11 +326,7 @@ export const updateSubscriptionPlan = async (req: Request, res: Response) => {
 
     const org = await prisma.organization.findUnique({
       where: { id: parsedOrganizationId },
-      select: {
-        id: true,
-        plan: true,
-        subscriptionId: true,
-      },
+      select: { id: true, plan: true, subscriptionId: true },
     });
 
     if (!org) {
@@ -328,163 +338,136 @@ export const updateSubscriptionPlan = async (req: Request, res: Response) => {
     if (!org.subscriptionId || org.plan === "FREE") {
       return res.status(400).json({
         success: false,
-        message: "No active paid subscription found. Start checkout first.",
+        message: "No active subscription found. Start a new checkout.",
       });
     }
 
     if (org.plan === selectedPlan.planEnum) {
       return res.status(400).json({
         success: false,
-        message: `Organization is already on ${selectedPlan.planEnum} plan`,
+        message: `Already on ${selectedPlan.planEnum} plan`,
       });
     }
 
-    const currentSubscription = await stripe.subscriptions.retrieve(org.subscriptionId);
+    await razorpay.subscriptions.cancel(org.subscriptionId, false);
 
-    if (currentSubscription.status === "canceled") {
-      return res.status(400).json({
-        success: false,
-        message: "Subscription is canceled. Please create a new checkout session.",
-      });
-    }
-
-    const subscriptionItem = currentSubscription.items.data?.[0];
-
-    if (!subscriptionItem) {
-      return res.status(400).json({
-        success: false,
-        message: "Subscription item not found",
-      });
-    }
-
-    const updatedSubscription = await stripe.subscriptions.update(org.subscriptionId, {
-      cancel_at_period_end: false,
-      proration_behavior: "create_prorations",
-      items: [{ id: subscriptionItem.id, price: selectedPlan.priceId }],
-      metadata: {
-        ...currentSubscription.metadata,
+    const newSubscription = await razorpay.subscriptions.create({
+      plan_id: selectedPlan.planId,
+      customer_notify: 1,
+      quantity: 1,
+      total_count: 12,
+      notes: {
         organizationId: String(parsedOrganizationId),
         plan: planKey,
+        userId: String(requesterId),
       },
     });
 
-    const expiryDate = getExpiryDate(updatedSubscription);
-
-    await prisma.organization.update({
-      where: { id: parsedOrganizationId },
-      data: {
-        plan: selectedPlan.planEnum,
-        subscriptionStatus: "ACTIVE",
-        ...(expiryDate && { planExpiresAt: expiryDate }),
-      },
+    const user = await prisma.user.findUnique({
+      where: { id: requesterId },
+      select: { email: true, name: true },
     });
 
     return res.status(200).json({
       success: true,
-      message: `Subscription updated to ${selectedPlan.planEnum}`,
-      data: {
-        organizationId: parsedOrganizationId,
-        plan: selectedPlan.planEnum,
-        status: "ACTIVE",
-        expiresAt: expiryDate,
+      subscriptionId: newSubscription.id,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      prefill: {
+        email: user?.email ?? "",
+        name: user?.name ?? "",
       },
+      message: `New checkout created for ${selectedPlan.planEnum} plan`,
     });
   } catch (error) {
     console.error("Error updating subscription:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
-// Webhook Handler
+// RAZORPAY WEBHOOK
 export const handleWebHook = async (req: Request, res: Response) => {
-  const sig = req.headers["stripe-signature"];
+  const signature = req.headers["x-razorpay-signature"] as string;
 
-  if (!sig) {
-    return res.status(400).json({ message: "Missing stripe signature" });
+  if (!signature) {
+    return res.status(400).json({ message: "Missing Razorpay signature" });
   }
 
-  let event: Stripe.Event;
+  // Verify webhook signature
+  const expectedSignature = crypto
+    .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET!)
+    .update(req.body) // raw buffer
+    .digest("hex");
+
+  if (expectedSignature !== signature) {
+    console.error("Webhook signature mismatch");
+    return res.status(400).json({ message: "Invalid webhook signature" });
+  }
+
+  let event: any;
   try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig as string,
-      process.env.STRIPE_WEBHOOK_SECRET!,
-    );
-  } catch (err: any) {
-    console.error("Webhook signature error:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    event = JSON.parse(req.body.toString());
+  } catch {
+    return res.status(400).json({ message: "Invalid JSON in webhook body" });
   }
 
   try {
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const organizationId = Number(session.client_reference_id);
-        const subscriptionId = session.subscription as string;
-        const customerId = session.customer as string;
+    const eventType = event.event as string;
+    console.log(`Razorpay webhook received: ${eventType}`);
 
-        if (!organizationId || isNaN(organizationId)) {
-          console.log("Skipping — invalid organizationId");
+    switch (eventType) {
+      // ── Subscription activated (first payment success) ──
+      case "subscription.activated":
+      case "subscription.charged": {
+        const subscription = event.payload.subscription.entity;
+        const orgId = Number(subscription.notes?.organizationId);
+        const planRaw = subscription.notes?.plan as string;
+        const selectedPlan = PLANS[planRaw as keyof typeof PLANS];
+
+        if (!orgId || isNaN(orgId) || !selectedPlan) {
+          console.log("Skipping — invalid orgId or plan in notes");
           break;
         }
 
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const planRaw = subscription.metadata.plan as string;
-        const planEnum = PLANS[planRaw as keyof typeof PLANS]?.planEnum ?? "PRO";
-        const expiryDate = getExpiryDate(subscription);
-
         await prisma.organization.update({
-          where: { id: organizationId },
+          where: { id: orgId },
           data: {
-            plan: planEnum,
-            stripeCustomerId: customerId,
-            subscriptionId: subscriptionId,
+            plan: selectedPlan.planEnum,
+            subscriptionId: subscription.id,
             subscriptionStatus: "ACTIVE",
-            ...(expiryDate && { planExpiresAt: expiryDate }),
+            planExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           },
         });
 
-        console.log(`Subscription activated for organization ${organizationId} — plan: ${planEnum}`);
+        console.log(
+          `✅ Subscription activated for org ${orgId} — plan: ${selectedPlan.planEnum}`,
+        );
         break;
       }
 
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
-        await handleInvoiceRenewal(invoice.subscription as string);
-        break;
-      }
+      // ── Payment failed ──
+      case "subscription.pending":
+      case "payment.failed": {
+        const subscription = event.payload.subscription?.entity;
+        if (!subscription) break;
 
-      case "invoice_payment.paid" as any: {
-        const invoicePayment = event.data.object as any;
-        const subscriptionId = invoicePayment.subscription ?? invoicePayment.subscriptionId ?? null;
-        if (subscriptionId) {
-          await handleInvoiceRenewal(subscriptionId);
-        }
-        break;
-      }
-
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice & { subscription?: string };
-        const subscriptionId = invoice.subscription as string;
-        if (!subscriptionId) break;
-
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const orgId = Number(subscription.metadata.organizationId);
+        const orgId = Number(subscription.notes?.organizationId);
         if (!orgId || isNaN(orgId)) break;
 
         await prisma.organization.update({
           where: { id: orgId },
           data: { subscriptionStatus: "PAST_DUE" },
         });
+
+        console.log(`⚠️ Payment failed for org ${orgId}`);
         break;
       }
 
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const orgId = Number(subscription.metadata.organizationId);
+      // ── Subscription cancelled ──
+      case "subscription.cancelled": {
+        const subscription = event.payload.subscription.entity;
+        const orgId = Number(subscription.notes?.organizationId);
         if (!orgId || isNaN(orgId)) break;
 
         await prisma.organization.update({
@@ -496,27 +479,53 @@ export const handleWebHook = async (req: Request, res: Response) => {
             planExpiresAt: null,
           },
         });
+
+        console.log(` Subscription cancelled for org ${orgId}`);
+        break;
+      }
+
+      // ubscription completed (all billing cycles done)
+      case "subscription.completed": {
+        const subscription = event.payload.subscription.entity;
+        const orgId = Number(subscription.notes?.organizationId);
+        if (!orgId || isNaN(orgId)) break;
+
+        await prisma.organization.update({
+          where: { id: orgId },
+          data: {
+            plan: "FREE",
+            subscriptionId: null,
+            subscriptionStatus: "CANCELED",
+            planExpiresAt: null,
+          },
+        });
+
+        console.log(
+          ` Subscription completed for org ${orgId} — reverted to FREE`,
+        );
         break;
       }
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        console.log(`Unhandled Razorpay event: ${eventType}`);
     }
 
-    res.json({ received: true });
+    return res.json({ received: true });
   } catch (error) {
     console.error("Webhook processing error:", error);
-    res.status(500).json({ message: "Webhook processing failed" });
+    return res.status(500).json({ message: "Webhook processing failed" });
   }
 };
 
+// GET ORGANIZATION PLAN
 export const getOrganizationPlan = async (req: Request, res: Response) => {
   try {
-    // FIX: use optional chaining — crashes with 500 if auth middleware fails silently
     const userId = (req as any).user?.userId;
 
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Not authenticated" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authenticated" });
     }
 
     const organizationId =
@@ -571,9 +580,8 @@ export const getOrganizationPlan = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching organization plan:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };

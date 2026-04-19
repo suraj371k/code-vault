@@ -109,47 +109,29 @@ const PLANS: PlanConfig[] = [
 ];
 
 /* ─── status helpers ─── */
-const STATUS_STYLES: Record<
-  string,
-  { bg: string; text: string; label: string }
-> = {
+const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   ACTIVE: { bg: "rgba(20,184,166,0.12)", text: "#2dd4bf", label: "Active" },
   PAST_DUE: { bg: "rgba(239,68,68,0.12)", text: "#f87171", label: "Past Due" },
-  CANCELED: {
-    bg: "rgba(107,114,128,0.12)",
-    text: "#9ca3af",
-    label: "Canceled",
-  },
+  CANCELED: { bg: "rgba(107,114,128,0.12)", text: "#9ca3af", label: "Canceled" },
   TRIALING: { bg: "rgba(245,158,11,0.12)", text: "#fbbf24", label: "Trialing" },
 };
 
 function getStatus(plan: PlanKey, status?: string) {
   if (plan === "FREE") {
-    return {
-      bg: "rgba(107,114,128,0.12)",
-      text: "#9ca3af",
-      label: "Free Tier",
-    };
+    return { bg: "rgba(107,114,128,0.12)", text: "#9ca3af", label: "Free Tier" };
   }
   return STATUS_STYLES[status ?? "ACTIVE"] ?? STATUS_STYLES.ACTIVE;
 }
 
-/* 
-   COMPONENT
- */
 export default function BillingPage() {
   const { slug } = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: orgs, isLoading: orgsLoading } = useOrganizations();
 
-  // Resolve the current org from slug
   const currentSlug = Array.isArray(slug) ? slug[0] : slug;
   const activeOrg = orgs?.find((o) => o.slug === currentSlug);
 
-  // BUG 2+3 FIX: Use numeric organizationId (not slug string) for the plan hook.
-  // This ensures queryKey is ["org-plan", 123] consistently, so cache
-  // invalidation after Stripe redirect actually refreshes the right query.
   const organizationId = activeOrg?.id ? Number(activeOrg.id) : undefined;
   const isOwner = activeOrg?.role === "OWNER";
 
@@ -166,20 +148,16 @@ export default function BillingPage() {
   const checkout = useCheckout();
   const cancelSubscription = useCancelSubscription();
   const [confirmPlan, setConfirmPlan] = useState<PlanKey | null>(null);
-  const [isRedirecting, setIsRedirecting] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
-  // Validate organization exists
   useEffect(() => {
     if (!orgsLoading && !activeOrg && slug) {
       toast.error("Organization not found");
     }
   }, [orgsLoading, activeOrg, slug]);
 
-  // Owners only can access billing page
   useEffect(() => {
     if (orgsLoading || !activeOrg) return;
-
     if (activeOrg.role !== "OWNER") {
       toast.error("Only organization owners can access billing");
       router.replace(`/organization/${activeOrg.slug}/dashboard`);
@@ -188,9 +166,7 @@ export default function BillingPage() {
 
   const currentPlan = planData?.data?.plan ?? "FREE";
   const subscriptionStatus = planData?.data?.status;
-  const expiresAt = planData?.data?.expiresAt
-    ? new Date(planData.data.expiresAt)
-    : null;
+  const expiresAt = planData?.data?.expiresAt ? new Date(planData.data.expiresAt) : null;
   const usage = planData?.data?.usage;
   const statusStyle = getStatus(currentPlan, subscriptionStatus);
 
@@ -199,7 +175,6 @@ export default function BillingPage() {
       toast.error("Only organization owners can upgrade plans");
       return;
     }
-
     if (planKey === "FREE" || planKey === currentPlan) return;
     if (!organizationId) {
       toast.error("Organization not selected");
@@ -213,35 +188,31 @@ export default function BillingPage() {
       toast.error("Only organization owners can upgrade plans");
       return;
     }
-
     if (!confirmPlan || !organizationId) return;
-    if (activeOrg?.slug) {
-      localStorage.setItem("lastPaidOrgSlug", activeOrg.slug);
-    }
 
-    setIsRedirecting(true);
+    setConfirmPlan(null); // close modal before opening Razorpay
+
     checkout.mutate(
       {
         plan: confirmPlan as Exclude<PlanKey, "FREE">,
         organizationId,
+        // Called after backend verifies payment — refresh plan data immediately
+        onVerified: () => {
+          refetchPlan();
+          queryClient.invalidateQueries({ queryKey: ["org-plan", organizationId] });
+        },
       },
       {
-        onSuccess: () => {
-          toast.success("Redirecting to checkout...");
-          // window.location.href redirect is handled inside useCheckout onSuccess
-        },
         onError: (error: unknown) => {
           const err = error as {
             response?: { data?: { message?: string } };
             message?: string;
           };
           const message =
-            err.response?.data?.message ||
-            err.message ||
-            "Failed to create checkout session";
-          toast.error(message);
-          setIsRedirecting(false);
-          setConfirmPlan(null);
+            err.response?.data?.message || err.message || "Failed to create checkout session";
+          if (message !== "Payment cancelled") {
+            toast.error(message);
+          }
         },
       },
     );
@@ -257,9 +228,7 @@ export default function BillingPage() {
           toast.success("Subscription canceled successfully");
           setShowCancelConfirm(false);
           refetchPlan();
-          queryClient.invalidateQueries({
-            queryKey: ["org-plan", organizationId],
-          });
+          queryClient.invalidateQueries({ queryKey: ["org-plan", organizationId] });
         },
         onError: (error: unknown) => {
           const err = error as {
@@ -267,33 +236,24 @@ export default function BillingPage() {
             message?: string;
           };
           const message =
-            err.response?.data?.message ||
-            err.message ||
-            "Failed to cancel subscription";
+            err.response?.data?.message || err.message || "Failed to cancel subscription";
           toast.error(message);
         },
       },
     );
   }
 
-  // Refetch plan data when window regains focus (user returns from Stripe).
-  // BUG 2+3 FIX: Now that organizationId is a proper number, queryKey invalidation
-  // correctly targets ["org-plan", 123] and the refetch actually updates the UI.
   useEffect(() => {
     const handleFocus = () => {
       if (organizationId) {
         refetchPlan();
-        queryClient.invalidateQueries({
-          queryKey: ["org-plan", organizationId],
-        });
+        queryClient.invalidateQueries({ queryKey: ["org-plan", organizationId] });
       }
     };
-
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, [organizationId, refetchPlan, queryClient]);
 
-  // Loading states
   if (orgsLoading || planLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -359,9 +319,7 @@ export default function BillingPage() {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-base font-semibold text-white">
-              {activeOrg.name}
-            </span>
+            <span className="text-base font-semibold text-white">{activeOrg.name}</span>
             <Badge
               className="text-xs px-2 py-0.5 border-0"
               style={{ background: statusStyle.bg, color: statusStyle.text }}
@@ -383,11 +341,11 @@ export default function BillingPage() {
 
         <div className="flex items-center gap-1.5 text-xs text-teal-600 shrink-0">
           <ShieldCheck className="size-4" />
-          Secured by Stripe
+          Secured by Razorpay
         </div>
       </motion.div>
 
-      {/* ── Usage Stats (if available) ── */}
+      {/* ── Usage Stats ── */}
       {usage && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -407,9 +365,7 @@ export default function BillingPage() {
                 {usage.snippets.limit === Infinity ? "∞" : usage.snippets.limit}
               </p>
               {usage.snippets.percentage > 80 && (
-                <p className="text-xs text-orange-500 mt-1">
-                  Approaching limit
-                </p>
+                <p className="text-xs text-orange-500 mt-1">Approaching limit</p>
               )}
             </div>
             <div>
@@ -419,9 +375,7 @@ export default function BillingPage() {
                 {usage.members.limit === Infinity ? "∞" : usage.members.limit}
               </p>
               {usage.members.percentage > 80 && (
-                <p className="text-xs text-orange-500 mt-1">
-                  Approaching limit
-                </p>
+                <p className="text-xs text-orange-500 mt-1">Approaching limit</p>
               )}
             </div>
           </div>
@@ -453,12 +407,8 @@ export default function BillingPage() {
                   background: isCurrentPlan
                     ? `linear-gradient(140deg, ${plan.glowColor} 0%, rgba(0,0,0,0.6) 100%)`
                     : "rgba(255,255,255,0.02)",
-                  borderColor: isCurrentPlan
-                    ? plan.borderActive
-                    : "rgba(255,255,255,0.07)",
-                  boxShadow: isCurrentPlan
-                    ? `0 0 30px ${plan.glowColor}`
-                    : "none",
+                  borderColor: isCurrentPlan ? plan.borderActive : "rgba(255,255,255,0.07)",
+                  boxShadow: isCurrentPlan ? `0 0 30px ${plan.glowColor}` : "none",
                 }}
               >
                 {plan.badge && (
@@ -482,16 +432,10 @@ export default function BillingPage() {
                       boxShadow: `0 0 12px ${plan.glowColor}`,
                     }}
                   >
-                    <Icon
-                      className="size-4"
-                      style={{ color: plan.iconColor }}
-                      strokeWidth={2}
-                    />
+                    <Icon className="size-4" style={{ color: plan.iconColor }} strokeWidth={2} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-white">
-                      {plan.label}
-                    </p>
+                    <p className="text-sm font-semibold text-white">{plan.label}</p>
                     <p className="text-[10px] text-zinc-500">{plan.limit}</p>
                   </div>
                 </div>
@@ -501,26 +445,17 @@ export default function BillingPage() {
                     <span className="text-3xl font-bold text-white">Free</span>
                   ) : (
                     <>
-                      <span className="text-3xl font-bold text-white">
-                        ${plan.price}
-                      </span>
-                      <span className="text-sm text-zinc-500 ml-1">
-                        / {plan.period}
-                      </span>
+                      <span className="text-3xl font-bold text-white">${plan.price}</span>
+                      <span className="text-sm text-zinc-500 ml-1">/ {plan.period}</span>
                     </>
                   )}
                 </div>
 
-                <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
-                  {plan.description}
-                </p>
+                <p className="text-xs text-zinc-400 mb-4 leading-relaxed">{plan.description}</p>
 
                 <ul className="space-y-2 mb-5 flex-1">
                   {plan.features.map((f) => (
-                    <li
-                      key={f}
-                      className="flex items-start gap-2 text-xs text-zinc-300"
-                    >
+                    <li key={f} className="flex items-start gap-2 text-xs text-zinc-300">
                       <Check
                         className="size-3.5 mt-0.5 shrink-0"
                         style={{ color: plan.iconColor }}
@@ -534,10 +469,7 @@ export default function BillingPage() {
                 {isCurrentPlan ? (
                   <div
                     className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold"
-                    style={{
-                      background: plan.glowColor,
-                      color: plan.iconColor,
-                    }}
+                    style={{ background: plan.glowColor, color: plan.iconColor }}
                   >
                     <Sparkles className="size-3.5" />
                     Current Plan
@@ -551,15 +483,12 @@ export default function BillingPage() {
                           ? "linear-gradient(135deg, rgba(245,158,11,0.18), rgba(245,158,11,0.08))"
                           : "linear-gradient(135deg, #0f766e, #0d9488)",
                       color: plan.key === "ENTERPRISE" ? "#fbbf24" : "#ccfbf1",
-                      boxShadow:
-                        plan.key === "PRO"
-                          ? "0 0 14px rgba(20,184,166,0.3)"
-                          : "none",
+                      boxShadow: plan.key === "PRO" ? "0 0 14px rgba(20,184,166,0.3)" : "none",
                     }}
                     onClick={() => handleUpgrade(plan.key)}
-                    disabled={checkout.isPending || isRedirecting}
+                    disabled={checkout.isPending}
                   >
-                    {checkout.isPending || isRedirecting ? (
+                    {checkout.isPending ? (
                       <Loader2 className="size-3.5 animate-spin" />
                     ) : (
                       `Upgrade to ${plan.label}`
@@ -570,9 +499,7 @@ export default function BillingPage() {
                     className="flex items-center justify-center py-2 rounded-xl text-xs font-medium text-zinc-600"
                     style={{ background: "rgba(255,255,255,0.03)" }}
                   >
-                    {currentPlan === "ENTERPRISE"
-                      ? "Highest plan"
-                      : "Downgrade"}
+                    {currentPlan === "ENTERPRISE" ? "Highest plan" : "Downgrade"}
                   </div>
                 )}
               </motion.div>
@@ -593,26 +520,19 @@ export default function BillingPage() {
             borderColor: "rgba(255,255,255,0.07)",
           }}
         >
-          <h2 className="text-sm font-semibold text-white">
-            Subscription Details
-          </h2>
+          <h2 className="text-sm font-semibold text-white">Subscription Details</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { label: "Plan", value: currentPlan },
               { label: "Status", value: statusStyle.label },
-              {
-                label: "Next Renewal",
-                value: expiresAt ? expiresAt.toLocaleDateString() : "—",
-              },
+              { label: "Next Renewal", value: expiresAt ? expiresAt.toLocaleDateString() : "—" },
               { label: "Billing", value: "Monthly" },
             ].map((item) => (
               <div key={item.label}>
                 <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold">
                   {item.label}
                 </p>
-                <p className="text-sm font-semibold text-white mt-0.5">
-                  {item.value}
-                </p>
+                <p className="text-sm font-semibold text-white mt-0.5">{item.value}</p>
               </div>
             ))}
           </div>
@@ -645,10 +565,7 @@ export default function BillingPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{
-              background: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-            }}
+            style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.94 }}
@@ -669,12 +586,8 @@ export default function BillingPage() {
                   <XCircle className="size-5 text-red-400" strokeWidth={2} />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white">
-                    Cancel Subscription
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    Your plan will revert to Free immediately.
-                  </p>
+                  <p className="text-sm font-semibold text-white">Cancel Subscription</p>
+                  <p className="text-xs text-zinc-500">Your plan will revert to Free immediately.</p>
                 </div>
               </div>
 
@@ -686,9 +599,10 @@ export default function BillingPage() {
                 }}
               >
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  This will cancel your <span className="text-white font-semibold">{currentPlan}</span> plan
-                  immediately. You&apos;ll lose access to paid features including
-                  increased member limits and unlimited snippets.
+                  This will cancel your{" "}
+                  <span className="text-white font-semibold">{currentPlan}</span> plan immediately.
+                  You&apos;ll lose access to paid features including increased member limits and
+                  unlimited snippets.
                 </p>
               </div>
 
@@ -730,10 +644,7 @@ export default function BillingPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{
-              background: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-            }}
+            style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.94 }}
@@ -758,14 +669,14 @@ export default function BillingPage() {
                     Upgrade to {confirmPlan.toLowerCase()}
                   </p>
                   <p className="text-xs text-zinc-500">
-                    You&apos;ll be redirected to Stripe to complete payment.
+                    A Razorpay payment window will open to complete your purchase.
                   </p>
                 </div>
               </div>
 
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Your subscription will start immediately after payment. You can
-                cancel anytime before the next billing cycle.
+                Your subscription starts immediately after payment. You can cancel anytime before
+                the next billing cycle. Supports UPI, cards, netbanking & wallets.
               </p>
 
               <div className="flex gap-3">
@@ -773,7 +684,7 @@ export default function BillingPage() {
                   variant="outline"
                   className="flex-1 text-xs rounded-xl border-zinc-800 text-zinc-400 hover:text-white bg-transparent"
                   onClick={() => setConfirmPlan(null)}
-                  disabled={checkout.isPending || isRedirecting}
+                  disabled={checkout.isPending}
                 >
                   Cancel
                 </Button>
@@ -785,12 +696,12 @@ export default function BillingPage() {
                     boxShadow: "0 0 14px rgba(20,184,166,0.3)",
                   }}
                   onClick={confirmCheckout}
-                  disabled={checkout.isPending || isRedirecting}
+                  disabled={checkout.isPending}
                 >
-                  {checkout.isPending || isRedirecting ? (
+                  {checkout.isPending ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    "Continue to Stripe"
+                    "Pay with Razorpay"
                   )}
                 </Button>
               </div>

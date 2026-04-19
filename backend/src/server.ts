@@ -34,19 +34,19 @@ app.use(
   }),
 );
 
-// Stripe webhook must receive raw body — register BEFORE express.json()
+// Razorpay webhook must receive raw body — register BEFORE express.json()
+// Razorpay sends signature in x-razorpay-signature header
 app.post(
-  "/stripe/webhook",
+  "/razorpay/webhook",
   express.raw({ type: "application/json" }),
   handleWebHook,
 );
 
 // passport middleware
 app.use(passport.initialize());
-// passport.session() lets req.isAuthenticated() work for session-based OAuth flows
 app.use(passport.session());
 
-// CORS must be before express.json() so preflight OPTIONS requests are handled correctly
+// CORS must be before express.json() so preflight OPTIONS requests work correctly
 app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
